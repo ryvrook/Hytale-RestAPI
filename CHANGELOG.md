@@ -40,8 +40,10 @@ suite groups need TrackerAPI 1.1.0, Coinage 1.3.0, Dominion 0.7.0, Feats 1.7.0, 
 - SocialBridge route group under `/api/socialbridge`: the Discord user linked to a player and the player linked to
   a Discord user, and `POST /api/socialbridge/post` under the new `socialbridge.write` scope for a line or an embed
   in one of its channels. `siblings.socialbridge` controls it. 135 routes with all eight suite mods.
-- After a reload of a sibling that does not reload its dependents, SocialBridge 0.2.0 or an older copy bound
-  under `always`, RestAPI reloads itself once under the suite lock instead of asking for `/plugin reload`.
+- After a reload of an older sibling bound under `always` that does not reload its dependents, RestAPI reloads
+  itself once under the suite lock instead of asking for `/plugin reload`.
+- A LinkageError in the TrackerAPI listener of the recent events ring drops the subscription at once, so a reload
+  of TrackerAPI never waits on RestAPI.
 
 ### Changed
 

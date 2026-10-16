@@ -235,8 +235,8 @@ linked to a player and the other way round, and `POST /api/socialbridge/post` wi
 is given, to one of its channels.
 
 A `/plugin reload` of a bound mod unmounts its group for two seconds, then that mod reloads RestAPI and the routes
-come back. SocialBridge 0.2.0 does not reload the plugins that list it, so after a reload of SocialBridge RestAPI
-reloads itself three seconds later, once.
+come back. An older copy bound under `always` does not reload RestAPI, so after a reload of one RestAPI reloads
+itself three seconds later, once.
 
 ## Commands
 

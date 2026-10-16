@@ -109,7 +109,7 @@ Settings docs are one file per section under `docs/settings/`, written by the te
 | `RestAPI-command-<run id>`, virtual | Waits for one command run, its grace window and the audit lines |
 | `RestAPI-webhook-<id>`, virtual | One per webhook, delivers its queue in order |
 | `RestAPI-rcon-accept` and `RestAPI-rcon-<n>`, virtual | The RCON accept loop and one per connection |
-| `RestAPI-relink` | A daemon platform thread, only after a reload of a sibling without a dependents pass. Waits three seconds and reloads RestAPI under the suite lock |
+| `RestAPI-relink` | A daemon platform thread, only after a reload of an older sibling without a dependents pass. Waits three seconds and reloads RestAPI under the suite lock |
 | `RestAPI-stop` | A platform thread that is not a daemon. Counts down a stop and calls `shutdownServer`, since the plugin's shutdown stops the scheduler |
 | Logger threads | `LogTap.add` and the events module's command tap copy a line and return |
 
@@ -127,19 +127,19 @@ group. Anything else unmounts it.
 The plugin object is kept at bind. A different object later means the mod was reloaded. The unit's classes were
 linked against the old copy, so the group stays down until RestAPI itself is reloaded. Every suite mod from the
 version in `Sibling.hooksSince` on (TrackerAPI 1.1.0, Coinage 1.2.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats
-1.5.0, Atlas 1.8.0, Lullaby 1.1.0) reloads every plugin that lists it two seconds after its own start, under
-`ryvrook.dependents.lock` and in dependency order. RestAPI lists all eight under `OptionalDependencies` at those
+1.5.0, Atlas 1.8.0, Lullaby 1.1.0, SocialBridge 0.2.0) reloads every plugin that lists it two seconds after its
+own start, under `ryvrook.dependents.lock` and in dependency order. RestAPI lists all eight under `OptionalDependencies` at those
 versions, so it comes back on its own under the suite reload rule in TrackerAPI's `docs/DEVELOPMENT.md`. The
 unbind on the way there (state `SHUTDOWN`, then a new plugin object) is logged at FINE only, through the second
 log consumer of `Siblings`. Listing them also makes the engine load them before RestAPI and stop RestAPI first,
 seen in the smoke run.
 
-SocialBridge 0.2.0 has the hooks but no dependents pass, and an older copy bound under `always` has neither. For
-those `Siblings` calls `onStaleLink` once per RestAPI instance and `SelfReload` reloads RestAPI on a daemon thread
+An older copy bound under `always` may have neither the hooks nor a dependents pass. For those `Siblings` calls
+`onStaleLink` once per RestAPI instance and `SelfReload` reloads RestAPI on a daemon thread
 of its own (`RestAPI-relink`), three seconds later, under `ryvrook.dependents.lock`, and only when the plugin
-manager still holds the instance that asked. A TrackerAPI or Dominion pass that reloads SocialBridge reloads
-RestAPI right after it, since RestAPI lists SocialBridge and so comes later in the pass order, and the relink then
-finds a new instance and does nothing. Everything the thread needs is built before it sleeps.
+manager still holds the instance that asked. When a pass of another sibling reloaded RestAPI meanwhile, the relink
+finds a new instance and does nothing. RestAPI lists SocialBridge too, so a pass that reloads both reloads
+SocialBridge first. Everything the thread needs is built before it sleeps.
 
 Nothing on the stop path loads a sibling class for the first time. `shutdown` calls `unbind` on the bound units
 only, and those touch the hook classes `bind` already loaded. During shutdown the plugin manager holds its write
