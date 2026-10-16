@@ -147,7 +147,7 @@ public final class Webhooks {
 
     /** The plugin's hooks with the JDK client and real lookups. */
     public static Webhooks standard(Path file, BiConsumer<String, Throwable> log) {
-        return new Webhooks(file, Webhooks::httpPost, InetAddress::getAllByName, Thread::sleep, log);
+        return new Webhooks(file, new JdkTransport(), InetAddress::getAllByName, Thread::sleep, log);
     }
 
     // ---- file --------------------------------------------------------------------------------------------
@@ -448,6 +448,13 @@ public final class Webhooks {
             }
             w.stop();
         }
+        if (transport instanceof AutoCloseable c) {
+            try {
+                c.close();
+            } catch (Exception e) {
+                log.accept("RestAPI could not close the webhook client", e);
+            }
+        }
     }
 
     /** Queues the event for every hook that wants its type. Runs under the ring's lock, so it never blocks. */
@@ -665,25 +672,54 @@ public final class Webhooks {
 
     // ---- the JDK client ----------------------------------------------------------------------------------
 
-    private static final HttpClient CLIENT = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    /**
+     * The JDK client, one per Webhooks, built on the first post and closed in {@link #stop}, so a reload of RestAPI
+     * leaves no selector thread behind and no client holding the old class loader. The next post after a
+     * /restapi reload builds a new one.
+     */
+    static final class JdkTransport implements Transport, AutoCloseable {
+        private HttpClient client;
 
-    static Result httpPost(URI url, Map<String, String> headers, byte[] body, Duration timeout) throws InterruptedException {
-        long start = System.nanoTime();
-        try {
-            HttpRequest.Builder b = HttpRequest.newBuilder(url).timeout(timeout)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(body));
-            headers.forEach(b::header);
-            HttpResponse<Void> r = CLIENT.send(b.build(), HttpResponse.BodyHandlers.discarding());
-            return new Result(r.statusCode(), null, (System.nanoTime() - start) / 1_000_000);
-        } catch (IOException e) {
-            String why = e instanceof java.net.http.HttpTimeoutException ? "timeout" : "network";
-            return new Result(0, why, (System.nanoTime() - start) / 1_000_000);
-        } catch (IllegalArgumentException e) {
-            return new Result(0, "bad_request", 0);
+        private synchronized HttpClient client() {
+            if (client == null) {
+                client = HttpClient.newBuilder()
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .build();
+            }
+            return client;
+        }
+
+        @Override
+        public Result post(URI url, Map<String, String> headers, byte[] body, Duration timeout) throws InterruptedException {
+            long start = System.nanoTime();
+            try {
+                HttpRequest.Builder b = HttpRequest.newBuilder(url).timeout(timeout)
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(body));
+                headers.forEach(b::header);
+                HttpResponse<Void> r = client().send(b.build(), HttpResponse.BodyHandlers.discarding());
+                return new Result(r.statusCode(), null, (System.nanoTime() - start) / 1_000_000);
+            } catch (IOException e) {
+                String why = e instanceof java.net.http.HttpTimeoutException ? "timeout" : "network";
+                return new Result(0, why, (System.nanoTime() - start) / 1_000_000);
+            } catch (IllegalArgumentException e) {
+                return new Result(0, "bad_request", 0);
+            }
+        }
+
+        @Override
+        public synchronized void close() {
+            HttpClient c = client;
+            client = null;
+            if (c != null) {
+                c.shutdownNow();
+                c.close();
+            }
+        }
+
+        synchronized boolean open() {
+            return client != null;
         }
     }
 

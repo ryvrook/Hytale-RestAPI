@@ -15,11 +15,6 @@ import java.time.Duration;
  * One request with a 1.5 second limit, answered as {@code {reachable, status, ok, version}}.
  */
 final class AtlasProbe {
-    private static final HttpClient CLIENT = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(1500))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
-
     private AtlasProbe() {
     }
 
@@ -44,10 +39,12 @@ final class AtlasProbe {
 
     static JsonObject health(String bind, int port, String basePath) {
         JsonObject o = new JsonObject();
-        try {
+        // A client per probe, closed before the answer goes back, so no selector thread outlives the request.
+        try (HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(1500))
+                .followRedirects(HttpClient.Redirect.NEVER).build()) {
             HttpRequest req = HttpRequest.newBuilder(URI.create(base(bind, port, basePath) + "/api/health"))
                     .timeout(Duration.ofMillis(1500)).GET().build();
-            HttpResponse<String> r = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> r = client.send(req, HttpResponse.BodyHandlers.ofString());
             o.addProperty("reachable", true);
             o.addProperty("httpStatus", r.statusCode());
             try {

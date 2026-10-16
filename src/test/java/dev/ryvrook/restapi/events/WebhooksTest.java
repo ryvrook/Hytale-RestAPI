@@ -282,8 +282,12 @@ class WebhooksTest {
             waitFor(() -> w.state(h.id()).delivered.get() == 1);
             w.stop(0);
 
-            Webhooks.Result moved = Webhooks.httpPost(URI.create("http://127.0.0.1:" + port + "/moved"), Map.of(),
+            Webhooks.JdkTransport t = new Webhooks.JdkTransport();
+            Webhooks.Result moved = t.post(URI.create("http://127.0.0.1:" + port + "/moved"), Map.of(),
                     new byte[0], Duration.ofSeconds(5));
+            assertTrue(t.open());
+            t.close();
+            assertFalse(t.open(), "the client is closed and dropped");
             assertEquals(302, moved.status());
             assertFalse(moved.ok());
             assertFalse(moved.retry());
