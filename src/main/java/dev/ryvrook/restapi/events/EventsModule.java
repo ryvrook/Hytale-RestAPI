@@ -5,6 +5,7 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import dev.ryvrook.restapi.RestApi;
 import dev.ryvrook.restapi.RestApiPlugin;
 import dev.ryvrook.restapi.RestModule;
+import dev.ryvrook.restapi.http.Gate;
 import dev.ryvrook.restapi.http.Route;
 
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ public final class EventsModule implements RestModule {
 
     private final EventRing ring;
     private final RequestCounters requests = new RequestCounters();
+    private volatile RestApi api;
     private final Set<String> reported = ConcurrentHashMap.newKeySet();
     private volatile HytaleLogger logger;
     private volatile EngineEvents engine;
@@ -101,6 +103,8 @@ public final class EventsModule implements RestModule {
 
     @Override
     public void start(RestApi api) {
+        this.api = api;
+        api.provide(Gate.Observer.class, requests);
         ring.resize(EventsSettings.RING.get());
         if (!EventsSettings.ENABLED.get()) {
             ring.closeAll();
@@ -126,6 +130,11 @@ public final class EventsModule implements RestModule {
 
     @Override
     public void stop() {
+        RestApi a = api;
+        if (a != null) {
+            a.withdraw(Gate.Observer.class, requests);
+            api = null;
+        }
         if (poll != null) {
             poll.cancel(false);
             poll = null;

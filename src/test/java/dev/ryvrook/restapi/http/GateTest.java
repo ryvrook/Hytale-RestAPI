@@ -70,6 +70,31 @@ class GateTest {
     }
 
     @Test
+    void theObserverHearsEachAnswerWithItsPatternAndEachKeyFailure() {
+        List<String> seen = new ArrayList<>();
+        gate.observe(new Gate.Observer() {
+            @Override
+            public void answered(String method, String pattern, int status) {
+                seen.add(method + " " + pattern + " " + status);
+            }
+
+            @Override
+            public void authFailed() {
+                seen.add("auth failed");
+            }
+        });
+        Request kick = Request.of("POST", "/api/players/Steve/kick", "127.0.0.1").with("Authorization", "Bearer " + admin);
+        gate.handle(kick);
+        get("/api/nowhere", reader);
+        get("/api/server", null);
+        assertEquals(List.of("POST /api/players/{player}/kick 200", "GET null 404", "auth failed",
+                "GET /api/server 401"), seen);
+        gate.observe(null);
+        get("/api/server", reader);
+        assertEquals(4, seen.size());
+    }
+
+    @Test
     void aValidKeyReachesTheHandler() {
         Response r = get("/api/server", reader);
         assertEquals(200, r.status());

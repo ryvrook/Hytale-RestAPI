@@ -30,6 +30,15 @@ public final class Gate {
     private final BiConsumer<String, Throwable> onFailure;
     private volatile AddressRanges proxies = AddressRanges.NONE;
     private volatile List<String> proxiesSource = List.of();
+    private volatile Observer observer;
+
+    /** Told about every answer and every request turned away for its key, for the request counts in /metrics. */
+    public interface Observer {
+        /** pattern is the route pattern that matched, or null when none did. */
+        void answered(String method, String pattern, int status);
+
+        void authFailed();
+    }
 
     public Gate(Router router, KeyStore keys, AuditSink audit, Clock clock, RateLimiter keyLimiter,
                 RateLimiter failLimiter, BiConsumer<String, Throwable> onFailure) {
@@ -46,8 +55,25 @@ public final class Gate {
         return router;
     }
 
+    /** Sets the observer, or clears it with null. */
+    public void observe(Observer o) {
+        observer = o;
+    }
+
     public Response handle(Request req) {
-        return secure(answer(req), req);
+        Response r = secure(answer(req), req);
+        Observer o = observer;
+        if (o != null) {
+            try {
+                String path = stripBase(req.path(), CoreSettings.HTTP_BASE_PATH.get());
+                String pattern = path != null && router.match(req.method(), path) instanceof Router.Found f
+                        ? f.route().pattern() : null;
+                o.answered(req.method(), pattern, r.status());
+            } catch (RuntimeException e) {
+                onFailure.accept("the request counter", e);
+            }
+        }
+        return r;
     }
 
     private Response answer(Request req) {
@@ -79,6 +105,10 @@ public final class Gate {
         boolean open = found != null && found.open().getAsBoolean();
 
         if (key == null && (token != null || !open)) {
+            Observer o = observer;
+            if (o != null) {
+                o.authFailed();
+            }
             long wait = failLimiter.acquire(client, CoreSettings.LIMITS_AUTH_FAILURES.get());
             if (token != null && CoreSettings.AUDIT_AUTH_FAILURES.get()) {
                 audit.record(new AuditEntry(clock.instant().toString(), "http", "unknown", client,

@@ -61,6 +61,7 @@ public final class RestApiPlugin extends JavaPlugin {
     private AuditLog audit;
     private Router router;
     private HttpHost host;
+    private Gate gate;
     private Siblings siblings;
     private List<RestModule> modules = List.of();
     private volatile ScheduledThreadPoolExecutor scheduler;
@@ -121,7 +122,7 @@ public final class RestApiPlugin extends JavaPlugin {
         audit = new AuditLog(dir.resolve("audit"), Clock.systemUTC(),
                 msg -> getLogger().at(Level.WARNING).log("%s", msg));
         router = new Router();
-        Gate gate = new Gate(router, keys, audit, Clock.systemUTC(), new RateLimiter(), new RateLimiter(),
+        gate = new Gate(router, keys, audit, Clock.systemUTC(), new RateLimiter(), new RateLimiter(),
                 (what, e) -> getLogger().at(Level.WARNING).withCause(e).log("RestAPI failed to answer %s", what));
         host = new HttpHost(gate);
         String version = getManifest() == null || getManifest().getVersion() == null
@@ -219,6 +220,7 @@ public final class RestApiPlugin extends JavaPlugin {
                 getLogger().at(Level.WARNING).withCause(e).log("RestAPI left out the %s routes", m.group());
             }
         }
+        gate.observe(api.service(Gate.Observer.class).orElse(null));
     }
 
     /** Under lock. */

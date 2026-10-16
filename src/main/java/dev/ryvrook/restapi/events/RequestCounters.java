@@ -1,5 +1,7 @@
 package dev.ryvrook.restapi.events;
 
+import dev.ryvrook.restapi.http.Gate;
+
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -8,9 +10,9 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Request counts for /metrics, by route pattern and status, so the label set stays as small as the route table.
  * A request that matched no route counts under the route label {@code unmatched}. The gate reports every answer
- * here once the lead wires it, see docs/dev/events.md.
+ * here through Gate.Observer while the events module runs.
  */
-public final class RequestCounters {
+public final class RequestCounters implements Gate.Observer {
     public static final String UNMATCHED = "unmatched";
 
     private final Map<String, LongAdder> requests = new ConcurrentHashMap<>();
@@ -18,6 +20,7 @@ public final class RequestCounters {
     private volatile boolean fed;
 
     /** One answered request. pattern is the route pattern, such as /api/players/{player}, or null. */
+    @Override
     public void answered(String method, String pattern, int status) {
         fed = true;
         String key = (method == null ? "GET" : method) + "\u0000" + (pattern == null ? UNMATCHED : pattern) + "\u0000" + status;
@@ -25,6 +28,7 @@ public final class RequestCounters {
     }
 
     /** A request with a wrong key or none on a closed route. */
+    @Override
     public void authFailed() {
         fed = true;
         authFailures.increment();

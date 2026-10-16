@@ -59,6 +59,16 @@ class CommandRunnerTest {
     }
 
     @Test
+    void rconRunsWriteTheStartedAndResultLinesUnderTheirOwnSource() {
+        CommandResult r = runner.run("admin", "rcon", "127.0.0.1", "help", null, Duration.ofSeconds(2)).join();
+        assertEquals(2, audit.size());
+        assertEquals("rcon", audit.get(0).source());
+        assertEquals("started run " + r.id(), audit.get(0).detail());
+        assertEquals("rcon", audit.get(1).source());
+        assertTrue(audit.get(1).detail().startsWith("done run " + r.id()));
+    }
+
+    @Test
     void aLateReplyInsideTheGraceWindowIsKept() {
         CommandResult r = run("late", null);
         assertEquals(List.of("late reply"), r.output());
