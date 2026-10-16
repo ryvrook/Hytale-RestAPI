@@ -1,0 +1,27 @@
+{
+  "Group": "Ryvrook",
+  "Name": "RestAPI",
+  "Version": "@version@",
+  "Description": "An HTTP API for server admins and their scripts, with named keys, scopes, rate limits and an audit log of every change. Binds to 127.0.0.1 until you change it. Suite mods get their own routes when they are installed.",
+  "Main": "dev.ryvrook.restapi.RestApiPlugin",
+  "Authors": [
+    {
+      "Name": "ryvrook"
+    }
+  ],
+  "Website": "https://github.com/ryvrook/restapi",
+  "ServerVersion": ">=0.7.0",
+  "Dependencies": {},
+  "OptionalDependencies": {
+    "Ryvrook:TrackerAPI": ">=0.1.0",
+    "Ryvrook:Coinage": ">=0.1.0",
+    "Ryvrook:Dominion": ">=0.1.0",
+    "Ryvrook:Feats": ">=0.1.0",
+    "Ryvrook:ChronicleStats": ">=0.1.0",
+    "Ryvrook:Atlas": ">=0.1.0",
+    "Ryvrook:Lullaby": ">=0.1.0"
+  },
+  "LoadBefore": {},
+  "DisabledByDefault": false,
+  "IncludesAssetPack": false
+}
