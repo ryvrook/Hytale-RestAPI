@@ -139,6 +139,20 @@ class OpenApiTest {
     }
 
     @Test
+    void aRouteDocCanNameItsMediaTypeAndDescribeItsPathParameters() {
+        router.mount("events", List.of(
+                route("events", "GET", "/api/webhooks/{id}/feed", Scope.EVENTS, Access.READ)
+                        .doc(new RouteDoc(List.of(), null, "hello", List.of())
+                                .produces("text/event-stream")
+                                .path(new RouteDoc.Param("id", "The webhook id from GET /api/webhooks.")))));
+        JsonObject op = build().getAsJsonObject("paths").getAsJsonObject("/api/webhooks/{id}/feed").getAsJsonObject("get");
+        assertEquals("The webhook id from GET /api/webhooks.",
+                op.getAsJsonArray("parameters").get(0).getAsJsonObject().get("description").getAsString());
+        assertTrue(op.getAsJsonObject("responses").getAsJsonObject("200").getAsJsonObject("content")
+                .has("text/event-stream"));
+    }
+
+    @Test
     void queryParametersComeFromTheRouteDoc() {
         JsonObject op = build().getAsJsonObject("paths").getAsJsonObject("/api/players").getAsJsonObject("get");
         JsonObject p = op.getAsJsonArray("parameters").get(0).getAsJsonObject();

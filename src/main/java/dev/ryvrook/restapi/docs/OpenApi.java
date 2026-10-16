@@ -162,7 +162,8 @@ public final class OpenApi {
             p.addProperty("name", name);
             p.addProperty("in", "path");
             p.addProperty("required", true);
-            p.addProperty("description", pathParamText(name));
+            String given = d.pathText(name);
+            p.addProperty("description", given != null && !given.isBlank() ? given : pathParamText(name));
             p.add("schema", type("string"));
             params.add(p);
         }
@@ -192,7 +193,7 @@ public final class OpenApi {
         JsonObject ok = new JsonObject();
         if (d.response() != null && !d.response().isBlank()) {
             ok.addProperty("description", Messages.get(DocsText.RESPONSE_OK));
-            ok.add("content", content(d.response()));
+            ok.add("content", content(d.response(), d.produces()));
             responses.add("200", ok);
         } else if (r.method().equals("DELETE")) {
             ok.addProperty("description", Messages.get(DocsText.RESPONSE_NO_CONTENT));
@@ -268,8 +269,19 @@ public final class OpenApi {
 
     /** A content map for an example: JSON with a schema, an event stream, or plain text. */
     static JsonObject content(String example) {
+        return content(example, null);
+    }
+
+    /** As {@link #content(String)}, with the media type given by the route when produces is not null. */
+    static JsonObject content(String example, String produces) {
         JsonObject media = new JsonObject();
         JsonObject content = new JsonObject();
+        if (produces != null && !produces.equals("application/json")) {
+            media.add("schema", type("string"));
+            media.addProperty("example", example);
+            content.add(produces, media);
+            return content;
+        }
         JsonElement parsed = parse(example);
         if (parsed != null) {
             media.add("schema", schemaOf(parsed));
