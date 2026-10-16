@@ -253,7 +253,8 @@ public final class CoinageRoutes implements SiblingUnit {
         Currency cur = currency(c, call.query("currency", null));
         JsonObject o = new JsonObject();
         o.addProperty("uuid", uuid.toString());
-        o.add("name", Json.str(accounts.nameOf(uuid).orElse(a.name())));
+        String name = accounts.nameOf(uuid).filter(n -> !n.isBlank()).orElse(a.name());
+        o.add("name", Json.str(name == null || name.isBlank() ? null : name));
         o.addProperty("status", CoinageJson.lower(a.status()));
         o.add("balances", CoinageJson.balances(c.currencies(), a.balances()));
         o.addProperty("currency", cur.id());

@@ -234,7 +234,13 @@ public final class FeatsRoutes implements SiblingUnit {
                 if (rows.size() >= limit) {
                     break;
                 }
-                rows.add(e);
+                if ("players".equals(field) && e.isJsonObject()) {
+                    JsonObject row = e.getAsJsonObject().deepCopy();
+                    row.addProperty("rank", rows.size() + 1);
+                    rows.add(row);
+                } else {
+                    rows.add(e);
+                }
             }
         }
         JsonObject o = new JsonObject();
