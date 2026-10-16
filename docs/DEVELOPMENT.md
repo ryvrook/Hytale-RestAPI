@@ -59,8 +59,9 @@ when the example is not enough to infer them, the media type (`produces`) and se
 `HttpHost` turns a `com.sun.net.httpserver` exchange into a `Request` and writes the `Response`. It refuses
 bodies over `http.maxBodyBytes` with 413 from `Content-Length` or while reading, and answers 503 with
 `Retry-After: 1` when `http.maxInFlight` requests already run. `sun.net.httpserver.maxReqTime` is set from
-`http.requestSeconds` when nobody set it before. The JDK reads it once per JVM, so Atlas or Chronicle Stats may
-have set it first.
+`http.requestSeconds` when nobody set it before. The JDK reads it once per JVM, and Atlas and Chronicle Stats
+load before RestAPI and set it to 30, so with either installed `http.requestSeconds` has no effect. `startHttp`
+logs one INFO line naming the value in use when the property holds a different number than the setting.
 
 `Gate` does the rest in this order, and the tests drive it without a socket.
 

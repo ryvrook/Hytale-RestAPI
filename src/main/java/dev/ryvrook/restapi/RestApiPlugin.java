@@ -283,6 +283,13 @@ public final class RestApiPlugin extends JavaPlugin {
             return;
         }
         host.stop();
+        String reqTime = System.getProperty("sun.net.httpserver.maxReqTime");
+        int wanted = CoreSettings.HTTP_REQUEST_SECONDS.get();
+        if (reqTime != null && !reqTime.trim().equals(Integer.toString(wanted))) {
+            getLogger().at(Level.INFO).log("RestAPI uses a request time limit of %s seconds, set before it started by "
+                    + "another plugin in this JVM such as Atlas or Chronicle Stats, so http.requestSeconds %d has no effect",
+                    reqTime.trim(), wanted);
+        }
         try {
             host.start(bind, port);
             boundBind = bind;

@@ -268,7 +268,7 @@ and the values in use stay. There are 123 settings, each listed with its default
 
 | Section | Keys | What it covers |
 |---|---|---|
-| `http` | 11 | Bind, port 8125, base path, body and stream limits, trusted proxies, CORS |
+| `http` | 11 | Bind, port 8125, base path, body and stream limits, trusted proxies, CORS. `http.requestSeconds` is read once per JVM, and Atlas and Chronicle Stats set it to 30 first, so with either installed it stays 30 and RestAPI logs one line when yours differs |
 | `keys`, `limits`, `audit` | 10 | The first key, `X-API-Key`, requests per minute, the audit log |
 | `server`, `siblings` | 10 | World sample interval, the suite check and `auto`, `always` or `never` per mod |
 | `players` | 15 | Read only mode, world timeout, give and ban caps, protected groups, which routes mount |

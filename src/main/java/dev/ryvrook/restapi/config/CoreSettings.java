@@ -25,7 +25,7 @@ public final class CoreSettings {
     public static final Setting<Integer> HTTP_MAX_STREAMS = Settings.integer("http.maxStreams", 16, 0, 1_024,
             "Server Sent Event streams open at the same time, for the console and event streams. 0 refuses every stream.");
     public static final Setting<Integer> HTTP_REQUEST_SECONDS = Settings.restart(Settings.integer("http.requestSeconds", 30, 5, 600,
-            "Seconds a client gets to send a whole request before the connection is closed. Shared with Atlas and Chronicle Stats in the same JVM, the first plugin to start sets it."));
+            "Seconds a client gets to send a whole request before the connection is closed. The JDK reads it once per JVM and Atlas and Chronicle Stats set 30 before RestAPI starts, so with either installed this has no effect and RestAPI logs one line when the value differs."));
     public static final Setting<Boolean> HTTP_HEALTH_PUBLIC = Settings.bool("http.healthPublic", true,
             "Answer GET /api/health without a key, with the status and version only. Off asks for a key there too.");
     public static final Setting<List<String>> HTTP_TRUSTED_PROXIES = Settings.list("http.trustedProxies", List.of(),
