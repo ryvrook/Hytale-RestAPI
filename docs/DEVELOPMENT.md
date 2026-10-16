@@ -146,6 +146,20 @@ Nothing on the stop path loads a sibling class for the first time. `shutdown` ca
 only, and those touch the hook classes `bind` already loaded. During shutdown the plugin manager holds its write
 lock, and a first load through a sibling's class loader there deadlocks.
 
+No thread of RestAPI waits for the plugin manager's lock either. The manager answers `getPlugin` and `getPlugins`
+under the read side of a private `ReentrantReadWriteLock` named `lock` and holds the write side for a whole stop
+and for every `/plugin reload`, calling `shutdown` under it. Without the gate a sibling check on the
+scheduler could take RestAPI's monitor, park on the read side, and leave `shutdown` waiting for that monitor for
+good. Every read made off a world thread now goes through `util.EngineLookups`, which is one `util.GatedLookup`:
+it only tries the read lock, gives the last answer for that key while the write side is held, and makes no look
+at all once `HytaleServer.isShuttingDown()` is true. The field is read by reflection, and when it is missing the
+reads go through ungated. The callers are `EngineProbe` (the sibling check every `siblings.checkSeconds`),
+`Folders.of`, the plugin poll and metrics of the events module, the read routes of `/api/plugins` and the
+`RestAPI-relink` thread. Load, unload and reload routes still call the manager directly, since they take the
+write lock themselves. `shutdown` cancels the check and sample tasks before it takes the monitor, then stops the
+scheduler and the audit writer through `util.Pools`, 1 s for running tasks and 0.5 s after the interrupt, and
+the webhook drain is 1 s. `StopUnderManagerLockTest` covers this without a server.
+
 The engine has no plugin enabled event, so presence is still a poll of the plugin manager. The API object each
 unit reads comes from the sibling's static `onEnable(Consumer)` hook and is dropped by `onDisable(Runnable)`, both
 taken back with `removeHooks` in `unbind`. No unit polls `get()` for a sibling at or above `hooksSince`.
@@ -542,7 +556,7 @@ Read with javap on Server-0.7.1.jar and seen on the headless smoke on 2026-10-16
   each gave one event, the default world gave `added` at boot and `removed` at stop.
 - `BootEvent` and `ShutdownEvent` are `IEvent<Void>`, taken with `register(Class, Consumer)`. Seen: `booted`
   about a second after the default world was added, `stopping` right after the `stop` command, before the
-  plugins shut down, so a webhook queue gets the two second drain in `stop`.
+  plugins shut down, so a webhook queue gets the one second drain in `stop`.
 - Deaths: `DeathSystems.OnDeathSystem` with `Archetype.empty()`, registered through
   `getEntityStoreRegistry().registerSystem` in setup. World thread. Cause from `DeathComponent.getDeathCause()`,
   else the `DamageCause` asset map by index. The killer from `Damage.EntitySource.getRef()` when it is a valid

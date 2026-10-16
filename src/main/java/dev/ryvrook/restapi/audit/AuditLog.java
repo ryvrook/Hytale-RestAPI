@@ -5,6 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.ryvrook.restapi.config.CoreSettings;
+import dev.ryvrook.restapi.util.Pools;
+
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -127,12 +129,8 @@ public final class AuditLog implements AuditSink {
         return List.copyOf(out);
     }
 
+    /** Lets queued lines reach the file for up to a second, then interrupts the writer, see {@link Pools}. */
     public void close() {
-        writer.shutdown();
-        try {
-            writer.awaitTermination(5, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        Pools.stop(writer);
     }
 }

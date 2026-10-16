@@ -58,6 +58,10 @@ suite groups need TrackerAPI 1.1.0, Coinage 1.3.0, Dominion 0.7.0, Feats 1.7.0, 
   records live, and `/api/atlas` takes its address from Atlas.
 - `/api/lullaby` reads Lullaby's API and gives who is in bed, who is ready and how many are needed. The copy of
   Lullaby's sleep rule is gone.
+- Plugin manager reads off the world threads only try the manager's lock and answer the last known state while a
+  stop or reload holds it. A sibling check that hit a stop used to park on that lock while holding RestAPI's own
+  monitor, and the shutdown waited on it. The scheduler and audit writer now stop within 1.5 s and the webhook
+  drain is 1 s.
 
 ## 0.1.0 - 2026-10-16
 

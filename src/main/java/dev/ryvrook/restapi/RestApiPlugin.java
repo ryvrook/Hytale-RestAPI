@@ -30,6 +30,8 @@ import dev.ryvrook.restapi.siblings.Siblings;
 import dev.ryvrook.restapi.text.CommandText;
 import dev.ryvrook.restapi.text.Messages;
 import dev.ryvrook.restapi.util.AddressRanges;
+import dev.ryvrook.restapi.util.EngineLookups;
+import dev.ryvrook.restapi.util.Pools;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -161,6 +163,16 @@ public final class RestApiPlugin extends JavaPlugin {
 
     @Override
     protected void shutdown() {
+        // The plugin manager holds its write lock through this whole method. Cancel the checks first so none is
+        // waiting for the monitor below, and stop the pool outside it, bounded to 1.5 s.
+        ScheduledFuture<?> check = siblingTask;
+        if (check != null) {
+            check.cancel(false);
+        }
+        ScheduledFuture<?> sample = sampleTask;
+        if (sample != null) {
+            sample.cancel(false);
+        }
         synchronized (lock) {
             if (host != null) {
                 host.stop();
@@ -175,13 +187,14 @@ public final class RestApiPlugin extends JavaPlugin {
             if (siblings != null) {
                 siblings.close();
             }
-            ScheduledThreadPoolExecutor s = scheduler;
-            if (s != null) {
-                s.shutdownNow();
-            }
-            if (audit != null) {
-                audit.close();
-            }
+        }
+        ScheduledThreadPoolExecutor s = scheduler;
+        if (s != null && !Pools.stop(s)) {
+            getLogger().at(Level.WARNING).log("RestAPI scheduler did not stop within %d ms and was left behind",
+                    Pools.GRACE_MILLIS + Pools.INTERRUPT_MILLIS);
+        }
+        if (audit != null) {
+            audit.close();
         }
     }
 
@@ -193,7 +206,7 @@ public final class RestApiPlugin extends JavaPlugin {
             return;
         }
         String line = "RestAPI could not reload itself after " + sibling.pluginName() + " was reloaded, run /plugin reload " + id;
-        SelfReload.schedule(() -> manager.getPlugin(id), this, () -> manager.reload(id), SuiteLock.shared(),
+        SelfReload.schedule(() -> EngineLookups.plugin(id), this, () -> manager.reload(id), SuiteLock.shared(),
                 () -> getLogger().at(Level.WARNING).log("%s", line));
     }
 
@@ -205,6 +218,8 @@ public final class RestApiPlugin extends JavaPlugin {
             return t;
         });
         s.setRemoveOnCancelPolicy(true);
+        s.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        s.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
         return s;
     }
 

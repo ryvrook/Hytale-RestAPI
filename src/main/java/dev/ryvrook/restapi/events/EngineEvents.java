@@ -21,7 +21,6 @@ import com.hypixel.hytale.server.core.modules.entity.damage.DamageCause;
 import com.hypixel.hytale.server.core.modules.entity.damage.DeathComponent;
 import com.hypixel.hytale.server.core.modules.entity.damage.DeathSystems;
 import com.hypixel.hytale.server.core.plugin.PluginBase;
-import com.hypixel.hytale.server.core.plugin.PluginManager;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.events.AddWorldEvent;
@@ -447,14 +446,10 @@ public final class EngineEvents {
         lastPlugins = null;
     }
 
-    /** Plugin id to {state, version}. */
+    /** Plugin id to {state, version}, the last known list while the plugin manager is busy. */
     static Map<String, String[]> pluginStates() {
         Map<String, String[]> out = new LinkedHashMap<>();
-        PluginManager pm = PluginManager.get();
-        if (pm == null) {
-            return out;
-        }
-        for (PluginBase p : pm.getPlugins()) {
+        for (PluginBase p : dev.ryvrook.restapi.util.EngineLookups.plugins()) {
             try {
                 String version = p.getManifest() == null || p.getManifest().getVersion() == null
                         ? null : p.getManifest().getVersion().toString();

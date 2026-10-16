@@ -2,10 +2,10 @@ package dev.ryvrook.restapi.suite;
 
 import com.hypixel.hytale.common.plugin.PluginIdentifier;
 import com.hypixel.hytale.server.core.plugin.PluginBase;
-import com.hypixel.hytale.server.core.plugin.PluginManager;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.ryvrook.restapi.RestApi;
 import dev.ryvrook.restapi.siblings.Sibling;
+import dev.ryvrook.restapi.util.EngineLookups;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,8 +22,7 @@ public final class Folders {
      */
     public static Path of(RestApi api, Sibling sibling) {
         try {
-            PluginManager m = PluginManager.get();
-            PluginBase p = m == null ? null : m.getPlugin(new PluginIdentifier(Sibling.GROUP, sibling.pluginName()));
+            PluginBase p = EngineLookups.plugin(new PluginIdentifier(Sibling.GROUP, sibling.pluginName()));
             if (p != null && p.getDataDirectory() != null) {
                 return p.getDataDirectory();
             }

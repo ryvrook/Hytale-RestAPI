@@ -26,7 +26,7 @@ import java.util.logging.Level;
 public final class EventsModule implements RestModule {
     public static final String GROUP = "events";
     /** How long a stop waits for webhook queues to empty, so the shutdown event still goes out. */
-    static final long DRAIN_MILLIS = 2_000;
+    static final long DRAIN_MILLIS = 1_000;
 
     private final EventRing ring;
     private final RequestCounters requests = new RequestCounters();

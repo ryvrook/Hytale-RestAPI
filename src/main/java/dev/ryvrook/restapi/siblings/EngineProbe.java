@@ -2,18 +2,17 @@ package dev.ryvrook.restapi.siblings;
 
 import com.hypixel.hytale.common.plugin.PluginIdentifier;
 import com.hypixel.hytale.server.core.plugin.PluginBase;
-import com.hypixel.hytale.server.core.plugin.PluginManager;
+import dev.ryvrook.restapi.util.EngineLookups;
 
-/** The plugin manager behind {@link PluginProbe}. Safe from any thread. */
+/**
+ * The plugin manager behind {@link PluginProbe}, read through {@link EngineLookups}, so a check never waits for the
+ * manager's lock. Safe from any thread.
+ */
 public final class EngineProbe implements PluginProbe {
     @Override
     public Found find(Sibling sibling) {
         try {
-            PluginManager manager = PluginManager.get();
-            if (manager == null) {
-                return null;
-            }
-            PluginBase p = manager.getPlugin(new PluginIdentifier(Sibling.GROUP, sibling.pluginName()));
+            PluginBase p = EngineLookups.plugin(new PluginIdentifier(Sibling.GROUP, sibling.pluginName()));
             if (p == null) {
                 return null;
             }

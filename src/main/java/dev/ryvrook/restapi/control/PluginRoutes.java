@@ -20,6 +20,7 @@ import dev.ryvrook.restapi.http.Response;
 import dev.ryvrook.restapi.http.Route;
 import dev.ryvrook.restapi.http.RouteDoc;
 import dev.ryvrook.restapi.text.Messages;
+import dev.ryvrook.restapi.util.EngineLookups;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -100,9 +101,20 @@ final class PluginRoutes {
         return null;
     }
 
+    /** The read routes go through {@link EngineLookups} and answer the last known list during a reload. */
     private static PluginBase find(Call call) {
         PluginId id = PluginId.parse(call.param("id"));
-        PluginBase p = loaded(manager(), id);
+        manager();
+        PluginBase p = EngineLookups.plugin(identifier(id));
+        if (p == null) {
+            for (PluginBase x : EngineLookups.plugins()) {
+                PluginIdentifier pi = x.getIdentifier();
+                if (pi != null && pi.getGroup().equalsIgnoreCase(id.group()) && pi.getName().equalsIgnoreCase(id.name())) {
+                    p = x;
+                    break;
+                }
+            }
+        }
         if (p == null) {
             throw ApiException.notFound("plugin_not_found", Messages.get(ControlText.PLUGIN_NOT_FOUND, "id", id));
         }
@@ -110,7 +122,8 @@ final class PluginRoutes {
     }
 
     private static Response list() {
-        List<PluginBase> all = new ArrayList<>(manager().getPlugins());
+        manager();
+        List<PluginBase> all = new ArrayList<>(EngineLookups.plugins());
         all.sort(Comparator.comparing(p -> String.valueOf(p.getIdentifier())));
         JsonArray a = new JsonArray();
         for (PluginBase p : all) {
@@ -124,11 +137,15 @@ final class PluginRoutes {
 
     private static Response available() {
         PluginManager pm = manager();
+        java.util.Set<String> loaded = new java.util.HashSet<>();
+        for (PluginBase p : EngineLookups.plugins()) {
+            loaded.add(String.valueOf(p.getIdentifier()));
+        }
         JsonArray a = new JsonArray();
         List<Map.Entry<PluginIdentifier, PluginManifest>> entries = new ArrayList<>(pm.getAvailablePlugins().entrySet());
         entries.sort(Comparator.comparing(e -> String.valueOf(e.getKey())));
         for (Map.Entry<PluginIdentifier, PluginManifest> e : entries) {
-            if (pm.getPlugin(e.getKey()) != null) {
+            if (loaded.contains(String.valueOf(e.getKey()))) {
                 continue;
             }
             JsonObject o = manifest(e.getValue());
