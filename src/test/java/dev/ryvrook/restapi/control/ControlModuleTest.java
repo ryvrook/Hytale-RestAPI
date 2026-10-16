@@ -124,6 +124,16 @@ class ControlModuleTest {
     }
 
     @Test
+    void anEngineAssertionBecomesA500() {
+        Route r = ControlModule.guarded(Route.of(ControlModule.GROUP, "GET", "/api/worlds/x", Scope.READ, Access.READ, "x", c -> {
+            throw new AssertionError("Data can only be accessed from a store thread!");
+        }));
+        Router router = new Router();
+        router.mount(ControlModule.GROUP, List.of(r));
+        assertThrows(IllegalStateException.class, () -> r.handler().handle(null));
+    }
+
+    @Test
     void aBadPluginIdIs400() {
         Response r = post("/api/plugins/Lullaby/reload", admin, null);
         assertEquals(400, r.status());

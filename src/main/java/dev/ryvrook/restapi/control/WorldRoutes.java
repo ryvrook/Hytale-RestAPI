@@ -285,12 +285,16 @@ final class WorldRoutes {
         throw ApiException.badRequest("weather_unknown", Messages.get(ControlText.WEATHER_UNKNOWN, "weather", asked, "world", world));
     }
 
-    /** Saves one world as the engine's /world save does. The chunk save starts on the world thread. */
+    /**
+     * Saves one world as the engine's /world save does. Both calls start on the world thread, the resource save
+     * asserts that it runs on the store's thread and the chunk save queues work there.
+     */
     static CompletableFuture<Void> saveWorld(World w) {
-        CompletableFuture<Void> chunks = CompletableFuture
-                .supplyAsync(() -> ChunkSavingSystems.saveChunksInWorld(w.getChunkStore().getStore(), w), w)
+        return CompletableFuture
+                .supplyAsync(() -> CompletableFuture.allOf(
+                        ChunkSavingSystems.saveChunksInWorld(w.getChunkStore().getStore(), w),
+                        WorldConfigSaveSystem.saveWorldConfigAndResources(w)), w)
                 .thenCompose(f -> f);
-        return CompletableFuture.allOf(chunks, WorldConfigSaveSystem.saveWorldConfigAndResources(w));
     }
 
     /** Waits for a save up to control.saveTimeoutSeconds and says saved, running or failed. */
