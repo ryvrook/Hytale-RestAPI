@@ -797,3 +797,22 @@ Lullaby 1.0.1, HTTP on 8138 and RCON on 25588.
   group answered 200.
 - Alone the console `stop` exited 0. With the seven a `POST /api/server/stop` with 5 seconds answered 202, left
   the `server stop` audit line and the process exited 0.
+
+Run of 0.2.0 on 2026-10-16 on the bundled 0.7.2 server with TrackerAPI 1.1.0, Coinage 1.3.0, Dominion 0.7.0,
+Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0, Lullaby 1.1.0 and SocialBridge 0.1.0, RestAPI on 8731, Atlas on
+8732, Chronicle on 8733, game port 5731.
+
+- `RestAPI 0.2.0 ready, HTTP API on http://127.0.0.1:8731 with 131 routes, 1 key, 7 of 7 suite mods bound`, alone
+  70 routes and 0 of 7. `/openapi.json` listed 131 and 70 operations. `GET /api/suite` showed every mod bound at
+  the versions above with `hooks` true, 10, 13, 15, 6, 9, 6 and 2 routes.
+- `POST /api/dominion/unclaim` on wilderness answered 409 with Dominion's "Nobody owns this land.", power for a
+  player Dominion never saw 409 "That player is not known", disband of an unknown tag 404. Sieges answered
+  `sidesKnown: true`. `/api/feats/top` answered `source: api`. Chronicle listed 46 boards and 3 series
+  (`players.online` as activity, two `jvm.*` as performance), a week board warming, minute points of
+  `players.online` with empty buckets as null. `/api/atlas/render` gave a budget of 1200 a minute, `worlds` the
+  default world. `/api/lullaby` gave mode `native` with `needed` and `missing` per world.
+- A Coinage give with an `Idempotency-Key` sent twice answered transaction 1 both times with the initiator
+  `{"type": "api_key", "name": "admin"}`, and `ledger?initiator=admin` found it.
+- `plugin reload` of Dominion, Feats, Coinage and Lullaby each logged "<mod> was reloaded, reloading
+  Ryvrook:RestAPI" once and RestAPI came back with 131 routes and 7 of 7 bound. No "RestAPI has no" line and no
+  RestAPI warning in the whole log. `/restapi reload` kept 131 routes, the console `stop` exited 0.

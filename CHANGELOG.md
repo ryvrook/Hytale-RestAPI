@@ -5,6 +5,11 @@ semantic versioning.
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-16
+
+Not released yet. Needs the Hytale 0.7.0 release server or newer. The suite groups need TrackerAPI 1.1.0,
+Coinage 1.3.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0 and Lullaby 1.1.0.
+
 ### Added
 
 - Players module. List, detail and inventory, kick, message, title, teleport, give, clear, game mode, heal, kill
