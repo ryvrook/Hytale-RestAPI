@@ -26,7 +26,7 @@ public final class SuiteModule implements RestModule {
     /** What each route group cannot serve until the sibling adds an API for it. */
     static final Map<Sibling, List<String>> WAITING = Map.of(
             Sibling.TRACKER, List.of(),
-            Sibling.COINAGE, List.of("An API key initiator type, today moves name RestAPI as a plugin and the key in the reason"),
+            Sibling.COINAGE, List.of(),
             Sibling.DOMINION, List.of("Staff actions under dominion.write", "A list of every faction including safe and war zones",
                     "Sieges with both sides and the phase, today they come from the siege banners"),
             Sibling.FEATS, List.of("A points leaderboard call, today it comes from export/feats.json"),

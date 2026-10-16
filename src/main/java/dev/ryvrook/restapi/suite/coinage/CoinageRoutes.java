@@ -55,8 +55,9 @@ import java.util.function.Supplier;
 /**
  * The Coinage route group under /api/coinage. Reads go through the Coinage API, which reads memory, except the
  * ledger search and closed report days, which Coinage reads on its IO thread. The three writes move money through
- * {@code Ledger} with the initiator and plugin {@code RestAPI} and the reason {@code restapi:<key name>}, so the
- * ledger and the daily reports name the key, and only keys holding coinage.write reach them.
+ * {@code Ledger} with the API key as the initiator ({@code Initiator.apiKey}, Coinage 1.3.0 and newer, else the
+ * plugin initiator {@code RestAPI}), the plugin {@code RestAPI} and the reason {@code restapi:<key name>}, so the
+ * ledger, /coinage find and the daily reports name the key. Only keys holding coinage.write reach them.
  */
 public final class CoinageRoutes implements SiblingUnit {
     static final String GROUP = Sibling.COINAGE.group();
@@ -111,7 +112,7 @@ public final class CoinageRoutes implements SiblingUnit {
         out.add(Route.of(GROUP, "GET", "/api/coinage", SCOPE, Access.READ,
                 "Coinage version, the ledger totals and the currencies.",
                 call -> summary(api.get())).doc(new RouteDoc(List.of(), null,
-                "{\"version\":\"1.2.0\",\"apiVersion\":4,\"transactions\":5120,\"supply\":125000000,\"accounts\":44,\"players\":40,\"shared\":4,\"primary\":\"coins\",\"currencies\":[\"coins\"]}",
+                "{\"version\":\"1.3.0\",\"apiVersion\":5,\"transactions\":5120,\"supply\":125000000,\"accounts\":44,\"players\":40,\"shared\":4,\"primary\":\"coins\",\"currencies\":[\"coins\"]}",
                 List.of("sibling_gone"))));
         out.add(Route.of(GROUP, "GET", "/api/coinage/currencies", SCOPE, Access.READ,
                 "Every currency with its symbol, decimals, starting and largest balance and exchange rate.",
@@ -140,6 +141,7 @@ public final class CoinageRoutes implements SiblingUnit {
                         new RouteDoc.Param("currency", "A currency id"),
                         new RouteDoc.Param("type", "deposit, withdraw, transfer, set or reversal"),
                         new RouteDoc.Param("plugin", "The plugin that made the move, such as RestAPI or Coinage"),
+                        new RouteDoc.Param("initiator", "Who made the move by name, a player, a plugin or a RestAPI key such as shopbot"),
                         new RouteDoc.Param("from", "Epoch milliseconds or an ISO instant"),
                         new RouteDoc.Param("to", "Epoch milliseconds or an ISO instant"),
                         new RouteDoc.Param("limit", "Rows")), null, null,
@@ -188,7 +190,7 @@ public final class CoinageRoutes implements SiblingUnit {
                     return replays.run(call.keyName(), idem, r.keepMillis(),
                             () -> move(api.get(), call, verb, r, audit));
                 }).doc(new RouteDoc(List.of(), example,
-                "{\"ok\":true,\"transaction\":{\"id\":5121,\"type\":\"transfer\",\"amount\":{\"minor\":1250,\"text\":\"12.50 Coins\"},\"plugin\":\"RestAPI\",\"reason\":\"restapi:grafana:event prize\"},\"fromAfter\":1250,\"toAfter\":3750,\"message\":\"Paid 12.50 Coins.\",\"replayed\":false}",
+                "{\"ok\":true,\"transaction\":{\"id\":5121,\"type\":\"transfer\",\"amount\":{\"minor\":1250,\"text\":\"12.50 Coins\"},\"initiator\":{\"type\":\"api_key\",\"player\":null,\"name\":\"grafana\"},\"plugin\":\"RestAPI\",\"reason\":\"restapi:grafana:event prize\"},\"fromAfter\":1250,\"toAfter\":3750,\"message\":\"Paid 12.50 Coins.\",\"replayed\":false}",
                 List.of("account_not_found", "unknown_currency", "bad_amount", "over_cap", "insufficient_funds",
                         "account_locked", "account_frozen", "max_balance", "same_account", "idempotency_key_required",
                         "bad_idempotency_key")));
@@ -197,7 +199,7 @@ public final class CoinageRoutes implements SiblingUnit {
     private static Response summary(CoinageApi c) {
         JsonObject o = new JsonObject();
         o.addProperty("version", c.version());
-        o.addProperty("apiVersion", CoinageApi.API_VERSION);
+        o.addProperty("apiVersion", apiVersion());
         Stats s = c.ledger().stats();
         if (s != null) {
             o.addProperty("transactions", s.transactions());
@@ -335,11 +337,19 @@ public final class CoinageRoutes implements SiblingUnit {
             }
         }
         String plugin = call.query("plugin", null);
+        String initiator = call.query("initiator", null);
+        initiator = initiator == null || initiator.isBlank() ? null : initiator.trim();
         int limit = limits.limit(call);
         Query q = new Query(id, currency, Json.time(call.query("from", null), "from", 0L),
                 Json.time(call.query("to", null), "to", Long.MAX_VALUE), type,
                 plugin == null || plugin.isBlank() ? null : plugin, limit);
-        List<Transaction> found = Waits.await(c.ledger().search(q), MOD, limits.waitMs());
+        Query narrowed = initiator == null ? q : byInitiator(q, initiator);
+        List<Transaction> found = Waits.await(c.ledger().search(narrowed == null ? q : narrowed), MOD, limits.waitMs());
+        if (initiator != null && narrowed == null) {
+            // Coinage before 1.3.0 has no initiator filter, so the page is narrowed here and may come back short.
+            String name = initiator;
+            found = found.stream().filter(t -> t.initiator() != null && name.equalsIgnoreCase(t.initiator().name())).toList();
+        }
         JsonArray rows = new JsonArray();
         for (int i = 0; i < found.size() && i < limit; i++) {
             rows.add(CoinageJson.transaction(c.currencies(), found.get(i)));
@@ -445,7 +455,7 @@ public final class CoinageRoutes implements SiblingUnit {
             case "take" -> Request.withdraw(target(c, body, "from", true), cur.id(), amount);
             default -> throw new IllegalArgumentException(verb);
         };
-        req = req.by(Initiator.plugin(PLUGIN)).plugin(PLUGIN).reason(reason).overdraft(false);
+        req = req.by(initiator(call.keyName())).plugin(PLUGIN).reason(reason).overdraft(false);
         Result r = c.ledger().apply(req);
         JsonObject o = new JsonObject();
         o.addProperty("ok", r.ok());
@@ -521,6 +531,46 @@ public final class CoinageRoutes implements SiblingUnit {
 
     private static ApiException badAmount() {
         return ApiException.badRequest("bad_amount", SuiteText.get(SuiteText.BAD_AMOUNT));
+    }
+
+    /**
+     * The key as the initiator of a move, {@code Initiator.apiKey} from Coinage 1.3.0 (API version 5) on. An older
+     * Coinage has no such call and gets the plugin initiator RestAPI, the key stays in the reason.
+     */
+    static Initiator initiator(String keyName) {
+        return initiator(keyName, Initiator::apiKey);
+    }
+
+    static Initiator initiator(String keyName, java.util.function.Function<String, Initiator> apiKey) {
+        if (keyName != null && !keyName.isBlank()) {
+            try {
+                return apiKey.apply(keyName);
+            } catch (NoSuchMethodError e) {
+                // Coinage 1.2.0 or older.
+            }
+        }
+        return Initiator.plugin(PLUGIN);
+    }
+
+    /** The query narrowed to one initiator by name, or null on a Coinage without that filter. */
+    static Query byInitiator(Query q, String name) {
+        try {
+            return q.initiator(name);
+        } catch (NoSuchMethodError e) {
+            return null;
+        }
+    }
+
+    /**
+     * The API version of the Coinage that runs, read from the live class. {@code CoinageApi.API_VERSION} is a
+     * compile time constant, javac would write the version of the jar RestAPI was built against.
+     */
+    static int apiVersion() {
+        try {
+            return CoinageApi.class.getField("API_VERSION").getInt(null);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return 0;
+        }
     }
 
     /** {@code restapi:<key>} or {@code restapi:<key>:<reason>}, the source before the first colon is restapi. */

@@ -14,6 +14,7 @@ import dev.ryvrook.coinage.api.Ledger;
 import dev.ryvrook.coinage.api.Mail;
 import dev.ryvrook.coinage.api.NetWorth;
 import dev.ryvrook.coinage.api.NetWorthParts;
+import dev.ryvrook.coinage.api.Initiator;
 import dev.ryvrook.coinage.api.Query;
 import dev.ryvrook.coinage.api.Rank;
 import dev.ryvrook.coinage.api.Reports;
@@ -221,6 +222,29 @@ class CoinageRoutesTest {
     }
 
     @Test
+    void theLedgerSearchNarrowsByInitiator() {
+        Calls.json(calls.get("/api/coinage/ledger?initiator=shopbot"));
+        Query q = coinage.searched.get();
+        assertEquals("shopbot", q.initiator());
+        assertTrue(q.matchesInitiator(new Transaction(1, 1L, Transaction.Type.DEPOSIT, "coins", null, STEVE, 5, 0, null,
+                0, 0, Initiator.apiKey("ShopBot"), "RestAPI", "restapi:shopbot", 0)));
+        Calls.json(calls.get("/api/coinage/ledger"));
+        assertNull(coinage.searched.get().initiator());
+    }
+
+    @Test
+    void anOlderCoinageGetsThePluginInitiator() {
+        assertEquals(Initiator.Type.API_KEY, CoinageRoutes.initiator("shopbot").type());
+        Initiator old = CoinageRoutes.initiator("shopbot", k -> {
+            throw new NoSuchMethodError("Initiator.apiKey");
+        });
+        assertEquals(Initiator.Type.PLUGIN, old.type());
+        assertEquals("RestAPI", old.name());
+        assertEquals(Initiator.Type.PLUGIN, CoinageRoutes.initiator(" ").type(), "a blank key name falls back too");
+        assertEquals(5, CoinageRoutes.apiVersion(), "read from the class, not inlined");
+    }
+
+    @Test
     void theRichListByBalanceOrNetWorth() {
         JsonObject o = Calls.json(calls.get("/api/coinage/top?limit=2"));
         assertEquals("balance", o.get("by").getAsString());
@@ -240,7 +264,8 @@ class CoinageRoutesTest {
         assertEquals(GUILD, req.to());
         assertEquals(COINS.parse("12.50").getAsLong(), req.amount());
         assertEquals("RestAPI", req.plugin());
-        assertEquals("RestAPI", req.initiator().name());
+        assertEquals("grafana", req.initiator().name(), "the key is the initiator");
+        assertTrue(req.initiator().isApiKey());
         assertEquals("restapi:grafana:event prize", req.reason());
         assertFalse(req.allowOverdraft());
         JsonObject o = Calls.json(r);
