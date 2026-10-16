@@ -2,7 +2,8 @@ package dev.ryvrook.restapi.suite.lullaby;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import dev.ryvrook.lullaby.api.LullabyApi;
+import dev.ryvrook.lullaby.api.SleepStatus;
 import dev.ryvrook.restapi.auth.Scope;
 import dev.ryvrook.restapi.http.Route;
 import dev.ryvrook.restapi.suite.Calls;
@@ -13,82 +14,85 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class LullabyRoutesTest {
+    /** Lullaby 1.1.0 with two worlds, one asleep halfway and one left to the engine. */
+    static final class FakeLullaby extends LullabyApi {
+        final List<SleepStatus> statuses = List.of(
+                new SleepStatus("default", true, "percent", 4, 4, 1, 1, 2, 0.5, 0, 12),
+                new SleepStatus("nether", false, "percent", 0, 0, 0, 0, 1, 0.0, 30, 3));
+
+        @Override public int apiVersion() { return 1; }
+        @Override public String version() { return "1.1.0"; }
+        @Override public String mode() { return "native"; }
+        @Override public List<String> worlds() { return List.of("default", "nether"); }
+        @Override public SleepStatus status(String world) {
+            return statuses.stream().filter(s -> s.world().equals(world)).findFirst().orElse(null);
+        }
+        @Override public List<SleepStatus> statuses() { return statuses; }
+        @Override public int sleepers(String world) { return status(world).inBed(); }
+        @Override public int needed(String world) { return status(world).needed(); }
+        @Override public double progress(String world) { return status(world).progress(); }
+        @Override public int nightsSkipped(String world) { return status(world).nightsSkipped(); }
+        @Override public int nightsSkipped() { return 15; }
+        @Override public Map<String, Integer> nightsSkippedByWorld() { return Map.of("default", 12, "nether", 3); }
+    }
+
     Path dir;
-    Map<String, Integer> players;
+    AtomicReference<LullabyApi> api;
     Calls calls;
 
     @BeforeEach
     void setUp(@TempDir Path dir) {
         this.dir = dir;
-        players = new LinkedHashMap<>();
-        players.put("default", 4);
-        players.put("nether", 0);
-        List<Route> routes = LullabyRoutes.routes(new JsonFile(dir.resolve("Lullaby.json"), "Lullaby"),
-                new JsonFile(dir.resolve("stats.json"), "Lullaby"), new JsonFile(dir.resolve("ignored.json"), "Lullaby"), () -> players);
-        calls = new Calls(routes);
+        api = new AtomicReference<>(new FakeLullaby());
+        calls = new Calls(LullabyRoutes.routes(api::get, new JsonFile(dir.resolve("ignored.json"), "Lullaby")));
     }
 
     @Test
     void routesStayUnderLullaby() {
-        for (Route r : LullabyRoutes.routes(null, null, null, Map::of)) {
+        for (Route r : LullabyRoutes.routes(() -> null, null)) {
             assertTrue(r.pattern().equals("/api/lullaby") || r.pattern().startsWith("/api/lullaby/"));
             assertEquals(Scope.LULLABY, r.scope());
         }
     }
 
     @Test
-    void withNoFilesTheDefaultsApply() {
+    void theSummaryComesFromTheApi() throws Exception {
         JsonObject o = Calls.json(calls.get("/api/lullaby"));
-        assertFalse(o.get("configRead").getAsBoolean());
-        assertEquals("percent", o.get("requirement").getAsString());
-        assertEquals(0, o.get("nightsSkipped").getAsLong());
-        JsonObject def = o.getAsJsonArray("worlds").get(0).getAsJsonObject();
-        assertEquals("default", def.get("world").getAsString());
-        assertEquals(2, def.get("neededOfOnline").getAsInt());
-        assertFalse(o.get("sleepersKnown").getAsBoolean());
+        assertEquals("native", o.get("mode").getAsString());
+        assertEquals("1.1.0", o.get("version").getAsString());
+        assertEquals(15, o.get("nightsSkipped").getAsInt());
+        assertEquals(0, o.get("ignoredPlayers").getAsInt());
+        assertTrue(o.get("sleepersKnown").getAsBoolean());
+        JsonArray worlds = o.getAsJsonArray("worlds");
+        assertEquals(2, worlds.size());
+        JsonObject def = worlds.get(0).getAsJsonObject();
+        assertEquals(1, def.get("inBed").getAsInt());
+        assertEquals(2, def.get("needed").getAsInt());
+        assertEquals(1, def.get("missing").getAsInt());
+        assertEquals(0.5, def.get("progress").getAsDouble());
+        Files.writeString(dir.resolve("ignored.json"), "{\"Ignored\": [\"00000000-0000-0000-0000-00000000000a\"]}");
+        assertEquals(1, Calls.json(calls.get("/api/lullaby")).get("ignoredPlayers").getAsInt());
     }
 
     @Test
-    void theFilesAreRead() throws Exception {
-        Files.writeString(dir.resolve("Lullaby.json"), "{\"Mode\": \"manual\", \"Requirement\": \"count\", \"Count\": 3,"
-                + " \"MinimumSleepers\": 1, \"Worlds\": {\"nether\": {\"Enabled\": false}, \"arena\": {\"Requirement\": \"percent\", \"Percent\": 100}}}");
-        Files.writeString(dir.resolve("stats.json"), "{\"NightsSkipped\": {\"default\": 12, \"old\": {\"$numberLong\": \"3\"}}}");
-        Files.writeString(dir.resolve("ignored.json"), "{\"Ignored\": [\"00000000-0000-0000-0000-00000000000a\"]}");
-        JsonObject o = Calls.json(calls.get("/api/lullaby"));
-        assertEquals("manual", o.get("mode").getAsString());
-        assertEquals(1, o.get("ignoredPlayers").getAsInt());
-        assertEquals(15, o.get("nightsSkipped").getAsLong());
-        JsonArray worlds = o.getAsJsonArray("worlds");
-        assertEquals(4, worlds.size());
-        JsonObject def = Calls.json(calls.get("/api/lullaby/worlds/default"));
-        assertEquals(3, def.get("neededOfOnline").getAsInt());
-        assertEquals(12, def.get("nightsSkipped").getAsLong());
-        assertFalse(Calls.json(calls.get("/api/lullaby/worlds/nether")).get("enabled").getAsBoolean());
-        JsonObject arena = Calls.json(calls.get("/api/lullaby/worlds/arena"));
-        assertEquals("percent", arena.get("requirement").getAsString());
-        assertFalse(arena.get("loaded").getAsBoolean());
+    void oneWorld() {
+        JsonObject nether = Calls.json(calls.get("/api/lullaby/worlds/nether"));
+        assertFalse(nether.get("enabled").getAsBoolean());
+        assertEquals(30, nether.get("cooldownSeconds").getAsLong());
+        assertEquals(3, nether.get("nightsSkipped").getAsInt());
         assertEquals(404, calls.get("/api/lullaby/worlds/moon").status());
     }
 
     @Test
-    void neededFollowsLullabysRule() {
-        JsonObject cfg = JsonParser.parseString("{\"Requirement\": \"percent\", \"Percent\": 50, \"MinimumSleepers\": 1}").getAsJsonObject();
-        SleepRule half = SleepRule.of(cfg, "default");
-        assertEquals(1, half.needed(1));
-        assertEquals(2, half.needed(3));
-        assertEquals(1, half.needed(0));
-        SleepRule count = SleepRule.of(JsonParser.parseString("{\"Requirement\": \"count\", \"Count\": 5}").getAsJsonObject(), "w");
-        assertEquals(3, count.needed(3));
-        SleepRule min = SleepRule.of(JsonParser.parseString("{\"Percent\": 10, \"MinimumSleepers\": 2}").getAsJsonObject(), "w");
-        assertEquals(2, min.needed(10));
-        SleepRule dynamic = SleepRule.of(JsonParser.parseString("{\"Requirement\": \"dynamic\"}").getAsJsonObject(), "w");
-        assertEquals(1, dynamic.needed(8));
+    void aStoppedLullabyAnswers503() {
+        api.set(null);
+        assertEquals(503, calls.get("/api/lullaby").status());
     }
 }

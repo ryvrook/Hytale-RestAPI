@@ -31,7 +31,7 @@ public final class SuiteModule implements RestModule {
             Sibling.FEATS, List.of(),
             Sibling.CHRONICLE, List.of(),
             Sibling.ATLAS, List.of(),
-            Sibling.LULLABY, List.of("A read API with the sleepers per world, today the files are read"));
+            Sibling.LULLABY, List.of());
 
     public SuiteModule() {
         SuiteSettings.touch();
