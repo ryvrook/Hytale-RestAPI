@@ -26,7 +26,8 @@ import java.util.TreeMap;
  * {@code Messages.get(CommandText.KEY_MADE, "name", name)}. Missing ids are added to the file with their
  * defaults, reworded ones are kept, unknown ones are kept for a later version.
  *
- * <p>API answers are not here. Their error codes are for scripts and stay fixed.
+ * <p>API answers keep their error codes fixed for scripts. The sentence in an answer's message field comes from
+ * here when the module defines one, so admins can reword it.
  */
 public final class Messages {
     private Messages() {

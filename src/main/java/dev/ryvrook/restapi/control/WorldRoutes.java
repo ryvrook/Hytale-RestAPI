@@ -16,13 +16,13 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.universe.world.storage.component.ChunkSavingSystems;
 import dev.ryvrook.restapi.RestApi;
 import dev.ryvrook.restapi.auth.Scope;
-import dev.ryvrook.restapi.config.CoreSettings;
 import dev.ryvrook.restapi.http.Access;
 import dev.ryvrook.restapi.http.ApiException;
 import dev.ryvrook.restapi.http.Call;
 import dev.ryvrook.restapi.http.Response;
 import dev.ryvrook.restapi.http.Route;
 import dev.ryvrook.restapi.http.RouteDoc;
+import dev.ryvrook.restapi.server.CoreModule;
 import dev.ryvrook.restapi.server.Health;
 import dev.ryvrook.restapi.server.WorldSample;
 import dev.ryvrook.restapi.text.Messages;
@@ -130,7 +130,7 @@ final class WorldRoutes {
     }
 
     private static long stallLimitMs() {
-        return Math.max(15_000L, 3_000L * CoreSettings.SAMPLE_SECONDS.get());
+        return CoreModule.stallLimitMs();
     }
 
     private static JsonObject summary(RestApi api, World w, String def) {

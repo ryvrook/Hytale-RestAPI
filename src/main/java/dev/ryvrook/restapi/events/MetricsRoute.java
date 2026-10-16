@@ -4,11 +4,11 @@ import com.hypixel.hytale.server.core.HytaleServer;
 import com.hypixel.hytale.server.core.universe.Universe;
 import dev.ryvrook.restapi.RestApi;
 import dev.ryvrook.restapi.auth.Scope;
-import dev.ryvrook.restapi.config.CoreSettings;
 import dev.ryvrook.restapi.http.Access;
 import dev.ryvrook.restapi.http.Response;
 import dev.ryvrook.restapi.http.Route;
 import dev.ryvrook.restapi.http.RouteDoc;
+import dev.ryvrook.restapi.server.CoreModule;
 import dev.ryvrook.restapi.server.WorldSample;
 
 import java.lang.management.GarbageCollectorMXBean;
@@ -67,7 +67,7 @@ final class MetricsRoute {
 
     /** Three sample intervals and at least 15 seconds, the rule /api/health uses. */
     static long stallLimitMs() {
-        return Math.max(15_000L, 3_000L * CoreSettings.SAMPLE_SECONDS.get());
+        return CoreModule.stallLimitMs();
     }
 
     private void players(Metrics m) {

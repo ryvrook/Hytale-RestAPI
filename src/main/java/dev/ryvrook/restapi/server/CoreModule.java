@@ -59,8 +59,8 @@ public final class CoreModule implements RestModule {
         return Response.json(Health.httpStatus(status), o);
     }
 
-    /** Three sample intervals and at least 15 seconds. */
-    static long stallLimitMs() {
+    /** Three sample intervals and at least 15 seconds. Health, worlds and /metrics all use this rule. */
+    public static long stallLimitMs() {
         return Math.max(15_000L, 3_000L * CoreSettings.SAMPLE_SECONDS.get());
     }
 

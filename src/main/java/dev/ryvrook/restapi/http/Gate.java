@@ -155,7 +155,8 @@ public final class Gate {
             r = route.handler().handle(call);
         } catch (ApiException e) {
             r = Response.error(e.status(), e.code(), e.getMessage());
-        } catch (Exception | LinkageError e) {
+        } catch (Exception | LinkageError | AssertionError e) {
+            // AssertionError too: the engine's store thread checks throw it, and a request must still get an answer.
             onFailure.accept(req.method() + " " + path, e);
             r = Response.error(500, "internal_error", "The request failed on the server, the log has the cause");
             detail = e.getClass().getSimpleName();
