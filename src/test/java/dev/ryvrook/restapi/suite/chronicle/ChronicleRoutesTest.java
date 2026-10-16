@@ -1,7 +1,12 @@
 package dev.ryvrook.restapi.suite.chronicle;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+import dev.ryvrook.chronicle.api.Board;
 import dev.ryvrook.chronicle.api.Category;
+import dev.ryvrook.chronicle.api.RecordBroken;
+import dev.ryvrook.chronicle.api.Resolution;
+import dev.ryvrook.chronicle.api.Series;
 import dev.ryvrook.chronicle.api.StatDef;
 import dev.ryvrook.chronicle.api.Window;
 import dev.ryvrook.restapi.auth.Scope;
@@ -18,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -31,7 +37,8 @@ class ChronicleRoutesTest {
             StatDef.builder("blocks_broken_by:").label("Blocks broken by block").category(Category.MINING).build(),
             StatDef.builder("deaths").label("Deaths").category(Category.COMBAT).boardEligible(true).aggregation(dev.ryvrook.chronicle.api.Aggregation.SUM).windowed(true).build());
 
-    static final class FakeChronicle implements ChronicleSource {
+    /** Chronicle as 1.4.0 answered, no boards, server or series calls, so those come from the export. */
+    static class FakeChronicle implements ChronicleSource {
         Window lastWindow;
         String lastWorld;
 
@@ -140,7 +147,7 @@ class ChronicleRoutesTest {
     }
 
     @Test
-    void boardsAndServerComeFromTheExport() throws Exception {
+    void anOlderChronicleGivesBoardsAndServerFromTheExport() throws Exception {
         assertEquals(503, calls.get("/api/chronicle/server").status());
         export();
         JsonObject top = Calls.json(calls.get("/api/chronicle/top/blocks_broken?limit=5"));
@@ -164,5 +171,110 @@ class ChronicleRoutesTest {
         assertEquals("blocks_broken_by:", ChronicleRoutes.defOf(DEFS, "blocks_broken_by:Rock").key());
         assertEquals("blocks_broken", ChronicleRoutes.defOf(DEFS, "blocks_broken").key());
         assertNull(ChronicleRoutes.defOf(DEFS, "jumps"));
+    }
+
+    /** Chronicle 1.5.0 with boards, totals, records and two series. */
+    static final class LiveChronicle extends FakeChronicle {
+        String boardWorld;
+        Window boardWindow;
+        Resolution resolution;
+        long from;
+        long to;
+
+        @Override
+        public String version() {
+            return "1.5.0";
+        }
+
+        @Override
+        public List<String> boardKeys() {
+            return List.of("blocks_broken", "deaths");
+        }
+
+        @Override
+        public CompletableFuture<Board> board(String key, Window window, String worldKey, int limit) {
+            boardWorld = worldKey;
+            boardWindow = window;
+            return CompletableFuture.completedFuture(new Board(key, window, worldKey, 88L, false, 2, List.of(
+                    new Board.Row(1, STEVE, "Steve", 20, 1), new Board.Row(2, null, "A player", 5, -1))));
+        }
+
+        @Override
+        public Map<String, Long> serverTotals() {
+            return Map.of("blocks_broken", 9100L);
+        }
+
+        @Override
+        public int online() {
+            return 3;
+        }
+
+        @Override
+        public List<RecordBroken> recentRecords(int limit) {
+            return List.of(new RecordBroken(1, "first", "blocks_broken", "Blocks broken", 1, "1", null, List.of("A player"),
+                    null, 5L, false, 0, List.of(), 0));
+        }
+
+        @Override
+        public Set<String> seriesIds() {
+            return Set.of("players.online", "tick.mspt");
+        }
+
+        @Override
+        public Series series(String id, Resolution resolution, long from, long to) {
+            this.resolution = resolution;
+            this.from = from;
+            this.to = to;
+            return new Series(id, resolution, "gauge", "players", 1, List.of(
+                    new Series.Point(1000, 60, 3.5, 2, 5, 210), new Series.Point(2000, 0, Double.NaN, Double.NaN, Double.NaN, Double.NaN)));
+        }
+    }
+
+    @Test
+    void boardsPerWindowAndWorldComeFromTheApi() {
+        LiveChronicle live = new LiveChronicle();
+        Calls calls = new Calls(ChronicleRoutes.routes(live, new JsonFile(file, "x"), () -> Limits.DEFAULTS));
+        JsonObject top = Calls.json(calls.get("/api/chronicle/top/blocks_broken?window=week&world=default&limit=500"));
+        assertEquals(Window.WEEK, live.boardWindow);
+        assertEquals("w_default", live.boardWorld);
+        assertEquals("week", top.get("window").getAsString());
+        assertEquals(88L, top.get("builtAt").getAsLong());
+        JsonArray rows = top.getAsJsonArray("rows");
+        assertEquals(1, rows.get(0).getAsJsonObject().get("movement").getAsInt());
+        assertTrue(rows.get(1).getAsJsonObject().get("hidden").getAsBoolean());
+        assertEquals(404, calls.get("/api/chronicle/top/nothing").status());
+        assertTrue(Calls.json(calls.get("/api/chronicle/boards")).get("windows").getAsBoolean());
+        JsonObject server = Calls.json(calls.get("/api/chronicle/server"));
+        assertEquals(9100, server.getAsJsonObject("server").get("blocks_broken").getAsLong());
+        assertEquals(3, server.get("online").getAsInt());
+        assertEquals("A player", server.getAsJsonArray("recentRecords").get(0).getAsJsonObject().getAsJsonArray("names").get(0).getAsString());
+        JsonObject summary = Calls.json(calls.get("/api/chronicle"));
+        assertEquals("1.5.0", summary.get("version").getAsString());
+        assertEquals(2, summary.get("boards").getAsInt());
+        assertEquals(3, summary.get("online").getAsInt());
+    }
+
+    @Test
+    void seriesAreSplitAndPerformanceCanBeHeldBack() {
+        LiveChronicle live = new LiveChronicle();
+        boolean[] performance = {true};
+        Calls calls = new Calls(ChronicleRoutes.routes(live, new JsonFile(file, "x"), () -> Limits.DEFAULTS,
+                () -> performance[0], () -> 100_000_000L));
+        JsonObject list = Calls.json(calls.get("/api/chronicle/series"));
+        assertEquals("players.online", list.getAsJsonArray("activity").get(0).getAsString());
+        assertEquals("tick.mspt", list.getAsJsonArray("performance").get(0).getAsString());
+        JsonObject one = Calls.json(calls.get("/api/chronicle/series/players.online?resolution=minute"));
+        assertEquals(Resolution.MINUTE, live.resolution);
+        assertEquals(100_000_000L, live.to);
+        assertEquals(100_000_000L - 86_400_000L, live.from);
+        assertEquals(3.5, one.getAsJsonArray("points").get(0).getAsJsonObject().get("avg").getAsDouble());
+        assertTrue(one.getAsJsonArray("points").get(1).getAsJsonObject().get("avg").isJsonNull());
+        assertEquals(200, calls.get("/api/chronicle/series/tick.mspt").status());
+        assertEquals(400, calls.get("/api/chronicle/series/players.online?resolution=week").status());
+        performance[0] = false;
+        assertEquals(0, Calls.json(calls.get("/api/chronicle/series")).getAsJsonArray("performance").size());
+        assertEquals(404, calls.get("/api/chronicle/series/tick.mspt").status());
+        assertEquals(404, calls.get("/api/chronicle/series/nothing").status());
+        assertEquals(501, this.calls.get("/api/chronicle/series").status(), "an older Chronicle has no series");
     }
 }

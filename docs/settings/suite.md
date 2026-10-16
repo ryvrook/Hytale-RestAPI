@@ -15,4 +15,5 @@ Keys under `suite` in `mods/Ryvrook_RestAPI/RestAPI.json`. Written by SettingsDo
 | `suite.coinage.idempotencySeconds` | `600` | reload | Seconds the answer to a Coinage write is kept under its key name and Idempotency-Key, so a retry gets the same answer and moves nothing. Range 10 to 86400. |
 | `suite.dominion.homesAndWarps` | `true` | reload | Include faction homes and warps in GET /api/dominion/points and in the faction detail. |
 | `suite.dominion.writes` | `true` | reload | Mount the Dominion staff routes (disband, leader, power, unclaim, unclaim all) for keys with the dominion.write scope. Applies on the next bind. |
+| `suite.chronicle.performanceSeries` | `true` | reload | Serve the Chronicle performance series (tick time, memory and the rest outside players.* and server.*) next to the activity series. |
 | `suite.atlas.probe` | `true` | reload | GET /api/atlas asks the Atlas web server for its own /api/health on the loopback address. |

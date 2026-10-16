@@ -71,7 +71,13 @@ public final class SuiteText {
             "Chronicle Stats has no stat {stat}. GET /api/chronicle/stats lists them.");
     public static final String BAD_WINDOW = Messages.define("suite.chronicle.badWindow", "window must be one of today, week, month or all.");
     public static final String NOT_EXPORTED = Messages.define("suite.chronicle.notExported",
-            "Chronicle Stats exports only the all time board of {stat}. A board per window waits on a Chronicle API for it.");
+            "This Chronicle Stats exports only the all time board of {stat}. Boards per window came with Chronicle Stats 1.5.0.");
+
+    public static final String NO_SERIES = Messages.define("suite.chronicle.noSeries",
+            "This Chronicle Stats has no server series in its API, they came with Chronicle Stats 1.5.0.");
+    public static final String SERIES_NOT_FOUND = Messages.define("suite.chronicle.seriesNotFound",
+            "Chronicle Stats has no series {id} that RestAPI serves. GET /api/chronicle/series lists them.");
+    public static final String BAD_RESOLUTION = Messages.define("suite.chronicle.badResolution", "resolution must be minute, hour or day.");
 
     public static final String UNKNOWN_LAYER = Messages.define("suite.atlas.unknownLayer", "Atlas has no layer {layer}.");
 
