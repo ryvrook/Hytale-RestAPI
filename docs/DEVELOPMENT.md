@@ -660,20 +660,118 @@ Client's bundled 0.7.2 server, RestAPI with a stand in for the console module th
   `plugin reload Ryvrook:RestAPI` was refused the same way. Neither reached the engine log.
 - `stop` from the console ended the server with exit code 0, no exception in the log.
 
+### Suite route groups
+
+One unit class per sibling under `dev.ryvrook.restapi.suite.<id>`, named in `Sibling`, is the only code that
+imports that sibling. `Siblings` loads it by name after the presence check and mounts what `bind` returns as group
+`suite.<id>`. Shared helpers sit in `dev.ryvrook.restapi.suite` and import no sibling: `Json`, `Limits`, `Names`
+(UUID, then online players through `Universe.getPlayerByUsername(name, NameMatching.EXACT_IGNORE_CASE)`, then the
+lookups a unit adds), `Waits` (a sibling future with `suite.waitMs`, 504 `sibling_timeout`), `JsonFile` (a sibling's
+file, parsed again only when its modified time or size changed), `Replays` (Idempotency-Key answers) and `Folders`
+(the sibling's data folder from `PluginBase.getDataDirectory()`, else `mods/Ryvrook_<Name>`). `SuiteModule` serves
+`GET /api/suite` and touches `SuiteSettings` and `SuiteText` so their keys exist before the files are read.
+
+Each unit builds its routes in a static `routes(...)` over a supplier of the sibling API and the limits, so the
+tests drive every route over a stand in: a subclass of `TrackerApi`, `CoinageApi` and `AtlasApi` (their
+constructors are protected), proxies for the sibling interfaces (`Counters`, `Journal`, `Accounts`, `Ledger`,
+`DominionApi`, `TerritoryProvider`), real `Faction`, `Member`, `Currency.coins()`, `Transaction` and `StatDef`
+objects, and `FeatsSource` and `ChronicleSource` interfaces because `FeatsApi` and `ChronicleApi` are final classes
+only their plugin makes. No suite test touches `SuiteSettings`, the units read it in `bind` only, so the settings
+docs stay the same whatever order the tests run in.
+
+#### Binding, per sibling, read from the jars on 2026-10-16
+
+| Sibling | Bound from | Read at each request |
+|---|---|---|
+| TrackerAPI 1.1.0 | `TrackerApi.onEnable` and `onDisable`, taken back with `removeHooks` in `unbind` | the API object the hook handed out last |
+| Coinage 1.2.0 (API 4) | `CoinageApi.onEnable`, `onDisable`, `removeHooks` | the same |
+| Atlas 1.7.0 | `AtlasApi.onEnable`, `onDisable`, `removeHooks` (public in 1.7.0) | the same, `SessionApi.get()` for hidden players |
+| Dominion 0.6.2 | `DominionApi.get()` non null | `DominionApi.get()` |
+| Feats 1.6.0 | `FeatsApi.get()` non null | `FeatsApi.get()` |
+| Chronicle Stats 1.4.0 | `ChronicleApi.get()` non null | `ChronicleApi.get()` |
+| Lullaby 1.0.1 | nothing, files only | `Lullaby.json`, `stats.json`, `ignored.json` |
+
+`onEnable` runs at once when the API is up, so `bind` registers the hooks, checks that one fired, and removes
+them again before it throws when none did. The registry reports the reason and tries again on the next check. A
+route whose API went away answers 503 `sibling_gone` until the registry unbinds the group.
+
+#### Threads
+
+Every route runs on the HTTP virtual thread. All seven APIs say they are safe from any thread and read memory,
+except these, which complete a future on the sibling's own IO thread and are waited on for `suite.waitMs`:
+`Counters.load`, `nameOf` and `uuidOf` (TrackerAPI names index), `Journal.find` (newest first, at most four at
+once inside TrackerAPI), `Ledger.search` (Coinage journal files) and `ChronicleApi.totalsAsync`. A leaderboard asks
+`nameOf` for every row at once and leaves a name null when its lookup did not finish in time. `Reports.days` reads
+a closed day's small file on the calling thread the first time.
+
+The recent events ring is one `subscribeKinds("RestAPI", kinds, ASYNC, ...)` on TrackerAPI's dispatch thread. The
+listener only appends to a deque per kind under one lock, `suite.tracker.recentPerKind` long, read on every add.
+The high volume kinds (`EventKind.highVolume()`) are left out unless `suite.tracker.recentHighVolume` is on, and
+nothing is subscribed with 0. The subscription is closed in `unbind` and in the disable hook.
+
+#### What each group reads
+
+- TrackerAPI. Counters through `Counters.all` for a loaded player, `load` for an offline one. Leaderboards through
+  `boardKeys` and `top`, capped at 1000 by TrackerAPI. Snapshots, `Stats`, `isTracked`, `Journal.kinds`. The
+  journal route builds `Journal.Query` from the query string, the box needs all six bounds, `next` is the oldest
+  `at` minus one when the page was full. Events become JSON through their record components, so a field TrackerAPI
+  adds shows up without a change here.
+- Coinage. `Currencies.resolve` (null is the primary), `Accounts.get`, `byHandle`, `uuidOf`, `shared`, `players`,
+  `all`, `top`, `rank`, `Ledger.history`, `search`, `find`, `stats`, `Reports.netWorth`, `topNetWorth`, `today`,
+  `days`. `Accounts.player(uuid)` is never called, it makes an account. The writes call `Ledger.apply` with
+  `Initiator.plugin("RestAPI")`, `plugin("RestAPI")`, `overdraft(false)` and the reason `restapi:<key>[:<reason>]`,
+  whose part before the first colon is the source the daily reports count. Amounts go through `Currency.parse`.
+  A `Result` that failed answers with the failure in lower case and Coinage's own sentence, 409 for funds, limits
+  and locks, 404, 400, 403 or 503 for the others.
+- Dominion. `top(Integer.MAX_VALUE)` is the list of factions in ranking order, the normal factions only (safe and
+  war zones are not in it). Claims come from `territoryProvider().territories(world)` per loaded world, chunk
+  coordinates through `ChunkUtil.xOfChunkIndex` and `zOfChunkIndex` (high and low 32 bits). Sieges are the points
+  of kind `siege`, owner the attacker, `expiresAt` the end of the phase. Warp passwords are never read.
+- Feats. `feats`, `points`, `unlocked`, `progress`, `title`, `rank`, `milestones`, `firsts`, `stats`. The points
+  board and recent unlocks come from `export/feats.json` (top 100, newest 50, `rarity` per feat).
+- Chronicle Stats. `stats`, `totalsAsync`, `window`, `perId`, `worldKey`, `isTracked`. A counter key is grouped
+  under its own definition or the longest prefix definition it starts with. `StatDef` refuses a windowed stat
+  that is not board eligible and SUM. Boards and server totals come from `export/stats.json`, the `ALL` window
+  only, with hidden players as Chronicle exported them.
+- Atlas. `layers`, `MarkerLayer.markers(world)`, point, circle, polygon and polyline fields. `atlas.json` gives
+  `bind`, `port`, `basePath` and `publicUrl`. With `suite.atlas.probe` the summary asks
+  `http://<bind or 127.0.0.1>:<port><basePath>/api/health` with a 1.5 second limit and keeps `ok`, `version` and
+  `status` of the public answer.
+- Lullaby. `Lullaby.json` keys `Mode`, `Requirement`, `Percent`, `Count`, `MinimumSleepers` and `Worlds`, the
+  per world entry over the top level. `stats.json` holds `NightsSkipped` per world, written by bson, so a number
+  may come as `{"$numberLong": "3"}`. `SleepRule.needed` copies Lullaby's `Rule.needed`. Players per world come from
+  RestAPI's own world samples.
+
 ## Headless smoke test
 
-The script used for 0.1.0 boots a scratch server with `--assets <Assets.zip> --auth-mode offline --disable-sentry
---bind 127.0.0.1:<port>` and stdin from a named pipe, waits for `RestAPI .* ready` and `Hytale Server Booted`, reads
-the first key from the log, curls the API, then pipes `/restapi keys create`, `keys list`, `status`, `reload`,
-`audit tail` and `stop`. Do not pass `--bare` and do not pass `--mods` for the same folder.
+The scripts boot a scratch server with `--assets <Assets.zip> --auth-mode offline --disable-sentry
+--bind 127.0.0.1:<port>` and stdin from a named pipe, wait for `RestAPI .* ready` and `Hytale Server Booted`,
+read the first key from the log, curl the API and pipe `/restapi` commands and `stop` into the console. Do not
+pass `--bare` and do not pass `--mods` for the same folder. With the seven suite jars on one machine next to
+other smokes, move Atlas and Chronicle Stats off 8123 and 8124 in their own files and give RestAPI its own
+`http.port` and `rcon.port`.
 
-Runs on 2026-10-16 on the client's bundled 0.7.2 server, alone and with TrackerAPI 1.1.0, Coinage 1.2.0,
-Dominion 0.6.2, Feats 1.6.0, Chronicle Stats 1.4.0, Atlas 1.7.0 and Lullaby 1.0.1.
+Runs on 2026-10-16 on the client's bundled 0.7.2 server, after all seven module branches were merged, alone and
+with TrackerAPI 1.1.0, Coinage 1.2.0, Dominion 0.6.2, Feats 1.6.0, Chronicle Stats 1.4.0, Atlas 1.7.0 and
+Lullaby 1.0.1, HTTP on 8138 and RCON on 25588.
 
-- Log: `RestAPI made the key admin with all. ... Key rapi_...`, then
-  `RestAPI 0.1.0 ready, HTTP API on http://127.0.0.1:8125 with 2 routes, 1 key, 0 of 7 suite mods bound`.
-- `GET /api/health` without a key answered 200 `{"status":"ok","restapi":"0.1.0"}`. `GET /api/server` with the key
-  answered 200 with version 0.7.2, one world at 30 TPS and the seven siblings. Without a key 401, with a wrong key
-  401, an unknown path with a key 404, `POST /api/server` 405, `X-API-Key` 200.
-- With the seven siblings every one showed as installed at its version with "this build of RestAPI has no routes
-  for it yet". `Shut down plugin Ryvrook:RestAPI` came first at stop and no exception was logged.
+- Alone: `RestAPI 0.1.0 ready, HTTP API on http://127.0.0.1:8138 with 70 routes, 1 key, 0 of 7 suite mods bound`.
+  With the seven: 120 routes and `7 of 7 suite mods bound`. `/openapi.json` listed 70 and 120 operations, the
+  same as `restapi_routes` in `/metrics`.
+- `say` with an `Idempotency-Key` sent twice answered `replayed: false` then `true` with the same run id, and the
+  engine log held one `RestAPI:admin executed command` line. `stop` and `plugin reload Ryvrook:RestAPI` through
+  `POST /api/commands` answered 403 `command_denied`, `POST /api/plugins/Ryvrook:RestAPI/reload` 403
+  `self_refused`.
+- `GET /api/console/stream` printed the say line, `GET /api/events` stayed open across `/restapi reload` and
+  printed the command events from both sides of it. `/metrics` held `restapi_requests_total` per route pattern.
+- mcrcon ran `say` and got `stop is on the deny list and did not run.` for `stop`. Both RCON runs left their
+  `started` and result audit lines with source `rcon`.
+- Plugins listed 107 alone and 114 with the seven. `PUT /api/worlds/default/time` with hour 6 read back as hour
+  6, progress 0.25. A reload of Lullaby through the API answered 200 in 119 ms with the lock held and logged one
+  `Enabled plugin Ryvrook:Lullaby`.
+- One GET per suite group answered 200. `siblings.dominion` never and a reload gave 404 on `/api/dominion`, auto
+  gave 200 again. A Coinage give sent twice with one `Idempotency-Key` answered the same transaction with
+  `replayed: true`. `plugin reload Ryvrook:TrackerAPI` restarted RestAPI with `7 of 7 suite mods bound` and every
+  group answered 200.
+- Alone the console `stop` exited 0. With the seven a `POST /api/server/stop` with 5 seconds answered 202, left
+  the `server stop` audit line and the process exited 0.
