@@ -816,7 +816,7 @@ Lullaby 1.0.1, HTTP on 8138 and RCON on 25588.
 - Alone the console `stop` exited 0. With the seven a `POST /api/server/stop` with 5 seconds answered 202, left
   the `server stop` audit line and the process exited 0.
 
-Run of 0.2.0 on 2026-10-16 on the bundled 0.7.2 server with TrackerAPI 1.1.0, Coinage 1.3.0, Dominion 0.7.0,
+An earlier run of 0.2.0 on 2026-10-16, before RestAPI linked SocialBridge, on the bundled 0.7.2 server with TrackerAPI 1.1.0, Coinage 1.3.0, Dominion 0.7.0,
 Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0, Lullaby 1.1.0 and SocialBridge 0.1.0, RestAPI on 8731, Atlas on
 8732, Chronicle on 8733, game port 5731.
 
@@ -834,3 +834,23 @@ Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0, Lullaby 1.1.0 and SocialBridge 
 - `plugin reload` of Dominion, Feats, Coinage and Lullaby each logged "<mod> was reloaded, reloading
   Ryvrook:RestAPI" once and RestAPI came back with 131 routes and 7 of 7 bound. No "RestAPI has no" line and no
   RestAPI warning in the whole log. `/restapi reload` kept 131 routes, the console `stop` exited 0.
+
+Final run of 0.2.0 on 2026-10-16 on the bundled 0.7.2 server with the nine jars, TrackerAPI 1.1.0, Coinage 1.3.0,
+Dominion 0.7.1, Feats 1.7.2, Chronicle Stats 1.5.0, Atlas 1.9.0, Lullaby 1.1.0 and SocialBridge 0.2.0, RestAPI on
+8961, Atlas on 8962, Chronicle on 8963, game port 5961.
+
+- `RestAPI 0.2.0 ready, HTTP API on http://127.0.0.1:8961 with 135 routes, 1 key, 8 of 8 suite mods bound`, and
+  `/openapi.json` listed 135 operations. Alone 70 routes and 0 of 8, with every `siblings.<id>` never 70 routes
+  and each row naming its setting, both without a RestAPI warning.
+- `/api/feats` listed 549 feats from Feats 1.7.2, `top` answered `source: api`, `recent` and `records` from the
+  export. `/api/socialbridge` gave version 0.2.0 and API 1, and a post with no Discord token configured answered
+  `posted: true`.
+- `plugin reload` of TrackerAPI, Coinage, Dominion, Feats, Chronicle Stats, Atlas, Lullaby and SocialBridge each
+  logged "<mod> was reloaded, reloading Ryvrook:RestAPI so it links to the new instance" once, followed by one
+  RestAPI ready line with 135 routes and 8 of 8. TrackerAPI started one second after its reload command.
+  Three `plugin reload Ryvrook:RestAPI` each gave one ready line.
+- A thread dump before the reloads and after all eleven RestAPI starts held the same 4 `HttpClient-*-SelectorManager`
+  threads (the engine's), 3 `HTTP-Dispatcher` (Atlas, Chronicle, RestAPI) and 2 `RestAPI-scheduler`.
+- Lullaby 1.0.1 next to RestAPI: the engine loads both, the Lullaby row reads "version 1.0.1 is older than 1.1.0"
+  and RestAPI serves its 70 routes. The OptionalDependencies minimum does not stop the load.
+- The console `stop` exited 0 in 0.67 seconds.
