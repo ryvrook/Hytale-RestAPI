@@ -16,7 +16,7 @@ by default. These are the types.
 | `death` | A player dies, and every creature with `events.npcDeaths` | `player` or `npc`, `world`, `cause`, `position`, `killer` or `killerNpc` when there is one |
 | `command` | Any command the engine runs, from a player, the console, RCON or the API | `by`, `command` |
 | `world` | A world was added or removed, `action` says which | `world` |
-| `plugin` | A plugin changed state, seen by a poll every `events.pluginPollSeconds` | `plugin`, `version`, `from`, `to` |
+| `plugin` | A plugin changed state, seen by a poll every `events.pluginPollSeconds`. `action` is the new state in lower case, or `unloaded` | `plugin`, `version`, `from`, `to`, where `NONE` means not loaded |
 | `server` | The server finished booting or started to shut down, `action` `booted` or `stopping` | |
 
 Commands have no engine event. The engine logs `<sender> executed command: <line>` for every command it runs,

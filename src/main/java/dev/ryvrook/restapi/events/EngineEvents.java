@@ -438,7 +438,7 @@ public final class EngineEvents {
             d.addProperty("version", c.version());
             d.addProperty("from", c.from());
             d.addProperty("to", c.to());
-            publish("plugin", c.to().toLowerCase(java.util.Locale.ROOT), d);
+            publish("plugin", "NONE".equals(c.to()) ? "unloaded" : c.to().toLowerCase(java.util.Locale.ROOT), d);
         }
     }
 

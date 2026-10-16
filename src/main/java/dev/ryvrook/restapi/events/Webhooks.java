@@ -50,7 +50,9 @@ import java.util.function.BiConsumer;
  *
  * <p>A delivery is a POST of the event as JSON, or of a Discord message for format discord, with
  * {@code X-RestAPI-Event}, {@code X-RestAPI-Delivery} and, when the hook has a secret,
- * {@code X-RestAPI-Signature: sha256=<hex HMAC-SHA256 of the body>}. Redirects are never followed. A network
+ * {@code X-RestAPI-Signature: sha256=<hex HMAC-SHA256 of the body>}, always over HTTP/1.1, since the JDK
+ * client's HTTP/2 upgrade on plain http held the body back from a target that does not answer the upgrade.
+ * Redirects are never followed. A network
  * error, a 429 or a 5xx is tried again webhooks.retries times, waiting webhooks.backoffSeconds and twice that
  * each time after. Any other answer outside 2xx fails at once. Hooks made over the API are checked for private
  * targets at creation and again before every delivery, so a name that later resolves to the LAN is caught.
@@ -664,6 +666,7 @@ public final class Webhooks {
     // ---- the JDK client ----------------------------------------------------------------------------------
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .followRedirects(HttpClient.Redirect.NEVER)
             .connectTimeout(Duration.ofSeconds(10))
             .build();

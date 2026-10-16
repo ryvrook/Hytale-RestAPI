@@ -17,8 +17,9 @@ import java.util.logging.Level;
 
 /**
  * Events, webhooks and metrics, group events. The engine listeners and the death system go in at setup and stay
- * for the life of the plugin. The ring of events lives as long as the module, so /restapi reload keeps it, while
- * the webhook workers, the log subscription and the plugin poll stop and start with the module.
+ * for the life of the plugin. The ring of events lives as long as the module, so /restapi reload keeps it and
+ * open streams stay open unless events.enabled went off. The webhook workers, the log subscription and the
+ * plugin poll stop and start with the module. At a server stop the HTTP server goes first and ends the streams.
  */
 public final class EventsModule implements RestModule {
     public static final String GROUP = "events";
@@ -102,6 +103,7 @@ public final class EventsModule implements RestModule {
     public void start(RestApi api) {
         ring.resize(EventsSettings.RING.get());
         if (!EventsSettings.ENABLED.get()) {
+            ring.closeAll();
             return;
         }
         for (String p : hooks.load()) {
@@ -133,7 +135,6 @@ public final class EventsModule implements RestModule {
             e.stopCommandTap();
             e.resetPlugins();
         }
-        ring.closeAll();
         Webhooks w = hooks;
         if (w != null) {
             w.stop(DRAIN_MILLIS);

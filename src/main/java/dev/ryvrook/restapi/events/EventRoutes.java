@@ -72,7 +72,7 @@ final class EventRoutes {
         Long last = since(header != null && !header.isBlank() ? header : call.query("since", null));
         return Response.stream(sink -> {
             try (EventRing.Subscription sub = ring.subscribe(last, types, STREAM_QUEUE)) {
-                sink.comment("RestAPI events, types " + String.join(",", types));
+                sink.comment("RestAPI events, types " + String.join(",", EventRing.TYPES.stream().filter(types::contains).toList()));
                 if (last != null && sub.first().gap()) {
                     JsonObject g = new JsonObject();
                     g.addProperty("after", last);
