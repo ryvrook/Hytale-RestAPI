@@ -25,6 +25,7 @@ public final class RestApi {
     private final WorldSampler worlds;
     private final long startedAt;
     private volatile Siblings siblings;
+    private final java.util.Map<Class<?>, Object> services = new java.util.concurrent.ConcurrentHashMap<>();
 
     RestApi(String version, Path dataDirectory, HytaleLogger logger, KeyStore keys, AuditLog audit, Router router,
             ScheduledExecutorService scheduler, WorldSampler worlds, long startedAt) {
@@ -85,5 +86,22 @@ public final class RestApi {
 
     void siblings(Siblings s) {
         siblings = s;
+    }
+
+    /**
+     * Offers a service to other modules, such as the console module's CommandService for RCON. A module provides
+     * in start and withdraws in stop.
+     */
+    public <T> void provide(Class<T> type, T service) {
+        services.put(type, type.cast(service));
+    }
+
+    public <T> void withdraw(Class<T> type, T service) {
+        services.remove(type, service);
+    }
+
+    /** A service another module provides, or empty when that module is missing or stopped. */
+    public <T> java.util.Optional<T> service(Class<T> type) {
+        return java.util.Optional.ofNullable(services.get(type)).map(type::cast);
     }
 }

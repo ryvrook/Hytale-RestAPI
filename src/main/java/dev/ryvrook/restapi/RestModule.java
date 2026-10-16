@@ -14,6 +14,13 @@ public interface RestModule {
     /** The route group, such as players. Every route the module returns names it. */
     String group();
 
+    /**
+     * Called once in the plugin's setup, before the files are read. The place for ECS systems and event
+     * listeners, which the engine accepts only during setup.
+     */
+    default void setup(RestApiPlugin plugin) throws Exception {
+    }
+
     /** The routes to mount. Called at start and after each /restapi reload. */
     List<Route> routes(RestApi api) throws Exception;
 

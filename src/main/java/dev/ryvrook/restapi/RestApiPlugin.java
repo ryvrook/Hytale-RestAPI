@@ -86,6 +86,13 @@ public final class RestApiPlugin extends JavaPlugin {
                 p -> getLogger().at(Level.WARNING).log("RestAPI skipped a module, %s", p));
         CoreSettings.HTTP_ENABLED.key();
         SiblingSettings.CHECK_SECONDS.key();
+        for (RestModule m : modules) {
+            try {
+                m.setup(this);
+            } catch (Exception | LinkageError e) {
+                getLogger().at(Level.WARNING).withCause(e).log("RestAPI could not set up %s", m.group());
+            }
+        }
         CommandText.ROOT.length();
 
         Settings.useDefaults();

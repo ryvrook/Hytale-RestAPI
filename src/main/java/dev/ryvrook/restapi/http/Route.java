@@ -13,9 +13,10 @@ import java.util.function.BooleanSupplier;
  * @param access  read, write or dangerous
  * @param open    when this answers true the route also answers without a key, with the key when one is sent
  * @param summary one sentence for the OpenAPI document and the README
+ * @param doc     query parameters, examples and error codes for the OpenAPI document
  */
 public record Route(String group, String method, String pattern, Scope scope, Access access, BooleanSupplier open,
-                    String summary, Handler handler) {
+                    String summary, Handler handler, RouteDoc doc) {
     private static final BooleanSupplier CLOSED = () -> false;
 
     public Route {
@@ -26,6 +27,17 @@ public record Route(String group, String method, String pattern, Scope scope, Ac
             throw new IllegalArgumentException("Route pattern must start with /, got " + pattern);
         }
         open = open == null ? CLOSED : open;
+        doc = doc == null ? RouteDoc.NONE : doc;
+    }
+
+    public Route(String group, String method, String pattern, Scope scope, Access access, BooleanSupplier open,
+                 String summary, Handler handler) {
+        this(group, method, pattern, scope, access, open, summary, handler, RouteDoc.NONE);
+    }
+
+    /** The same route with its OpenAPI details. */
+    public Route doc(RouteDoc details) {
+        return new Route(group, method, pattern, scope, access, open, summary, handler, details);
     }
 
     /** A route that always needs a key. */

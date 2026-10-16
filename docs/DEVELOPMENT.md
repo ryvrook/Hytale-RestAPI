@@ -31,12 +31,19 @@ in `build.gradle.kts` and reaches the manifest through `processResources`.
 | `server` | `CoreModule` (`/api/health`, `/api/server`), `ServerFacts`, `WorldSampler`, `WorldSample`, `Health` |
 | `siblings` | `Sibling`, `Mode`, `SiblingSettings`, `PluginProbe`, `EngineProbe`, `SiblingUnit`, `Presence`, `Siblings` |
 | `command` | `RestApiCommand`, `Perms`, `Replies` |
+| `exec` | `CommandService` and `CommandResult`, the contract the console module implements and RCON uses |
 | `util` | `AddressRanges` (CIDR sets, no DNS), `Versions` |
 
 Later modules each get a package of their own and are listed by class name in `Modules.CLASSES`, so a build with
 any of them missing still works and adding one never edits a shared file. A module declares its settings and
 text in its own classes and touches them in its constructor, before `RestAPI.json` and `messages.json` are read.
 Suite route groups live under `dev.ryvrook.restapi.suite.<id>` and are named in `Sibling`.
+
+A module has four calls. `setup(plugin)` runs in the plugin's setup, the only time the engine takes ECS systems
+and event listeners. `routes(api)` returns its routes, every one naming the module's group. `start(api)` runs
+after they are mounted, `stop()` at shutdown and before a reload starts it again. Modules share services through
+`RestApi.provide` and `RestApi.service`, such as the console module's `CommandService` that RCON runs commands
+through. A route carries a `RouteDoc` with query parameters, examples and error codes for the OpenAPI document.
 
 ## The request pipeline
 
