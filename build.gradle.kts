@@ -32,10 +32,10 @@ fun siblingJar(property: String, vararg candidates: String): String {
 val trackerApiJar = siblingJar("trackerApiJar", "trackerapi/build/libs/TrackerAPI-1.1.0.jar")
 // The Coinage api jar holds the api packages only.
 val coinageJar = siblingJar("coinageJar", "coinage/build/libs/Coinage-api-1.3.0.jar")
-val dominionJar = siblingJar("dominionJar", "dominion/build/libs/DominionFactions-0.7.0.jar")
-val featsJar = siblingJar("featsJar", "feats/build/libs/Feats-1.7.0.jar")
+val dominionJar = siblingJar("dominionJar", "dominion/build/libs/DominionFactions-0.7.1.jar")
+val featsJar = siblingJar("featsJar", "feats/build/libs/Feats-1.7.2.jar")
 val chronicleJar = siblingJar("chronicleJar", "chronicle-stats/build/libs/ChronicleStats-1.5.0.jar")
-val atlasJar = siblingJar("atlasJar", "atlas/build/libs/Atlas-1.8.0.jar")
+val atlasJar = siblingJar("atlasJar", "atlas/build/libs/Atlas-1.9.0.jar")
 val lullabyJar = siblingJar("lullabyJar", "lullaby/build/libs/Lullaby-1.1.0.jar")
 val siblingJars = listOf(trackerApiJar, coinageJar, dominionJar, featsJar, chronicleJar, atlasJar, lullabyJar)
 

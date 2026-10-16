@@ -73,6 +73,11 @@ class AtlasRoutesTest {
         }
 
         @Override
+        public Runnable onMarker(java.util.function.Consumer<dev.ryvrook.atlas.api.MarkerEvent> listener) {
+            return () -> { };
+        }
+
+        @Override
         public String publicUrl() {
             return publicUrl;
         }
