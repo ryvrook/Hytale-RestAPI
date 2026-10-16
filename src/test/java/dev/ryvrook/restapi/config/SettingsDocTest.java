@@ -100,11 +100,24 @@ class SettingsDocTest {
         for (Setting<?> s : Settings.all()) {
             boolean row = all.lines().anyMatch(l -> l.startsWith("|") && l.contains("`" + s.key() + "`"));
             boolean family = s.key().startsWith("siblings.") && all.contains("`siblings.<id>`");
-            if (!row && !family) {
+            if (!row && !family && !sectionRow(all, s.key())) {
                 missing.add(s.key());
             }
         }
-        assertTrue(missing.isEmpty(), "README and docs/readme have no row for " + String.join(", ", missing));
+        assertTrue(missing.isEmpty(), "README has no row for " + String.join(", ", missing)
+                + " and no section row pointing at docs/settings");
+    }
+
+    /**
+     * The README may list a whole section in one table row (a row that names the section in a code span) when
+     * docs/settings/<section>.md, written by this test, holds the row for the key itself.
+     */
+    private static boolean sectionRow(String readme, String key) throws Exception {
+        String section = key.substring(0, key.indexOf('.'));
+        boolean named = readme.lines().anyMatch(l -> l.startsWith("|") && l.contains("`" + section + "`"));
+        Path doc = Path.of("docs", "settings", section + ".md");
+        return named && Files.isRegularFile(doc)
+                && Files.readString(doc).lines().anyMatch(l -> l.startsWith("|") && l.contains("`" + key + "`"));
     }
 
     @Test
