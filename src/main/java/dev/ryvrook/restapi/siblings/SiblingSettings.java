@@ -20,7 +20,9 @@ public final class SiblingSettings {
         for (Sibling s : Sibling.values()) {
             MODES.put(s, Settings.text("siblings." + s.id(), "auto",
                     "auto, always or never. " + s.adds() + " while " + s.pluginName() + " " + s.minimum()
-                            + " or newer runs. always binds an older version too, never keeps the routes away."));
+                            + " or newer runs. " + (s == Sibling.LULLABY
+                            ? "always changes nothing for Lullaby 1.0.1, which has no API to bind"
+                            : "always binds an older version too") + ", never keeps the routes away."));
         }
     }
 

@@ -423,7 +423,7 @@ initiator `RestAPI` and an `initiator` filter applied to the page after the sear
 the ranked factions only, gives sieges from the siege banners (`"sidesKnown": false`) and answers 501
 `not_supported` on the staff routes and the siege history. Feats before 1.7.0 and Chronicle before 1.5.0 give
 their boards and server totals from `export/feats.json` and `export/stats.json` (the all time boards only).
-Atlas before 1.8.0 answers 501 on `render` and `worlds`. Lullaby before 1.1.0 has no API and does not bind.
+Atlas before 1.8.0 answers 501 on `render` and `worlds`. Lullaby before 1.1.0 has no API and does not bind, not even under `always`.
 
 ### Dominion
 
@@ -449,7 +449,8 @@ line to the server log. Every call lands in RestAPI's audit log as `dominion <ac
 ### Chronicle Stats
 
 `GET /api/chronicle/top/{stat}?window=week&world=default&limit=10` reads Chronicle's board for that window and
-world, at most 100 rows, with `movement` since the last build and hidden players as Chronicle shows them to the
+world, at most 100 rows, with `movement`, the places a player moved against yesterday's ranks on the `all` board
+(positive is up, 0 on the other windows), and hidden players as Chronicle shows them to the
 public. A world filtered board Chronicle has not built yet is waited on for `suite.waitMs`. `GET /api/chronicle/boards`
 lists the stats that have a board. `GET /api/chronicle/series` lists the server series, `players.*` and
 `server.*` as activity and the rest as performance, and `series/{id}?resolution=minute&from=...&to=...` gives the

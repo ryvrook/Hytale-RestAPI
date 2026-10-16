@@ -671,7 +671,7 @@ Client's bundled 0.7.2 server, RestAPI with a stand in for the console module th
   4066, and joined them into 113 lines. Alone it is 3947 bytes in one packet.
 - A wrong key and a key with only `read` both gave `Authentication failed!` and exit 1, audited as `wrong key` and
   `key lacks the commands scope`.
-- `stop` answered `stop is on the deny list and did not run.`, `/api/health` still answered 200 after it, and
+- `stop` answered `stop is on the deny list and was not run.`, `/api/health` still answered 200 after it, and
   `plugin reload Ryvrook:RestAPI` was refused the same way. Neither reached the engine log.
 - `stop` from the console ended the server with exit code 0, no exception in the log.
 
@@ -773,7 +773,8 @@ nothing is subscribed with 0. The subscription is closed in `unbind` and in the 
   with `suite.atlas.probe` the summary asks `http://<bind or 127.0.0.1>:<port><basePath>/api/health` with a 1.5
   second limit and keeps `ok`, `version` and `status` of the public answer.
 - Lullaby. `version`, `apiVersion`, `mode`, `statuses`, `worlds`, `status(world)` and `nightsSkipped()`. Only the
-  length of `Ignored` in `ignored.json` is read from a file. The rule Lullaby 1.0.1 used to be copied into
+  length of `Ignored` in `ignored.json` is read from a file, so the opted out count depends on the shape of
+  Lullaby's file until Lullaby offers an `ignoredCount()` call. A file that does not read counts as nobody. The rule Lullaby 1.0.1 used to be copied into
   `SleepRule` is gone, `SleepStatus.needed` is Lullaby's own answer.
 - SocialBridge. `version`, `API_VERSION` through reflection, `linkedUser` and `linkedPlayer` for the Discord
   service, and `post(channel, Announcement)`. A post with a title or footer becomes an embed, text is cut at 2000
@@ -802,7 +803,7 @@ Lullaby 1.0.1, HTTP on 8138 and RCON on 25588.
   `self_refused`.
 - `GET /api/console/stream` printed the say line, `GET /api/events` stayed open across `/restapi reload` and
   printed the command events from both sides of it. `/metrics` held `restapi_requests_total` per route pattern.
-- mcrcon ran `say` and got `stop is on the deny list and did not run.` for `stop`. Both RCON runs left their
+- mcrcon ran `say` and got `stop is on the deny list and was not run.` for `stop`. Both RCON runs left their
   `started` and result audit lines with source `rcon`.
 - Plugins listed 107 alone and 114 with the seven. `PUT /api/worlds/default/time` with hour 6 read back as hour
   6, progress 0.25. A reload of Lullaby through the API answered 200 in 119 ms with the lock held and logged one

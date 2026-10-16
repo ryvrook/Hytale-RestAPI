@@ -110,7 +110,7 @@ public final class ChronicleRoutes implements SiblingUnit {
                 "The stats Chronicle keeps a board for.",
                 call -> boards(chronicle, export)));
         out.add(Route.of(GROUP, "GET", "/api/chronicle/top/{stat}", SCOPE, Access.READ,
-                "The board of a stat for a window and world, with each row's movement since the last build. Players who hide from boards show as hidden.",
+                "The board of a stat for a window and world, with each row's places moved against yesterday on the all board. Players who hide from boards show as hidden.",
                 call -> top(chronicle, export, call, limits.get())).doc(new RouteDoc(
                 List.of(new RouteDoc.Param("limit", "Rows, at most 100"), new RouteDoc.Param("window", "all, today, week or month"),
                         new RouteDoc.Param("world", "Only this world")),
