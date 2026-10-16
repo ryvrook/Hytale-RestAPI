@@ -22,6 +22,8 @@ public final class CoreSettings {
             "Largest request body accepted, in bytes. Bigger requests get 413 before the body is read.");
     public static final Setting<Integer> HTTP_MAX_IN_FLIGHT = Settings.integer("http.maxInFlight", 32, 1, 1_024,
             "Requests handled at the same time. The rest get 503 with Retry-After 1. Event streams do not count.");
+    public static final Setting<Integer> HTTP_MAX_STREAMS = Settings.integer("http.maxStreams", 16, 0, 1_024,
+            "Server Sent Event streams open at the same time, for the console and event streams. 0 refuses every stream.");
     public static final Setting<Integer> HTTP_REQUEST_SECONDS = Settings.restart(Settings.integer("http.requestSeconds", 30, 5, 600,
             "Seconds a client gets to send a whole request before the connection is closed. Shared with Atlas and Chronicle Stats in the same JVM, the first plugin to start sets it."));
     public static final Setting<Boolean> HTTP_HEALTH_PUBLIC = Settings.bool("http.healthPublic", true,

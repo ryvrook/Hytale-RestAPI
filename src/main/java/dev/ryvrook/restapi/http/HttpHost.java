@@ -32,6 +32,8 @@ public final class HttpHost {
     private ExecutorService executor;
     private volatile Semaphore inFlight;
     private volatile int inFlightSize;
+    private volatile Semaphore streams;
+    private volatile int streamsSize;
     private String boundTo;
 
     public HttpHost(Gate gate) {
@@ -64,6 +66,11 @@ public final class HttpHost {
         }
     }
 
+    /** The port actually bound, which differs from the one asked for only when that was 0. -1 when stopped. */
+    public synchronized int port() {
+        return server == null ? -1 : server.getAddress().getPort();
+    }
+
     /** host:port while serving, else null. */
     public synchronized String boundTo() {
         return boundTo;
@@ -79,6 +86,21 @@ public final class HttpHost {
                     inFlightSize = want;
                 }
                 s = inFlight;
+            }
+        }
+        return s;
+    }
+
+    private Semaphore streamSlots() {
+        int want = CoreSettings.HTTP_MAX_STREAMS.get();
+        Semaphore s = streams;
+        if (s == null || streamsSize != want) {
+            synchronized (this) {
+                if (streams == null || streamsSize != want) {
+                    streams = new Semaphore(want);
+                    streamsSize = want;
+                }
+                s = streams;
             }
         }
         return s;
@@ -117,9 +139,43 @@ public final class HttpHost {
                     ? null : ex.getRemoteAddress().getAddress().getHostAddress();
             Request req = new Request(ex.getRequestMethod(), ex.getRequestURI().getRawPath(),
                     ex.getRequestURI().getRawQuery(), headers, body, peer);
-            write(ex, gate.handle(req));
+            Response r = gate.handle(req);
+            if (r.stream() != null) {
+                slots.release();
+                slots = null;
+                stream(ex, r);
+                return;
+            }
+            write(ex, r);
         } finally {
-            slots.release();
+            if (slots != null) {
+                slots.release();
+            }
+        }
+    }
+
+    /** Sends the headers and runs the stream until it returns or the client leaves. */
+    private void stream(HttpExchange ex, Response r) throws IOException {
+        Semaphore s = streamSlots();
+        if (!s.tryAcquire()) {
+            write(ex, Response.error(503, "too_many_streams", "Every event stream slot is taken").with("Retry-After", "5"));
+            return;
+        }
+        try (ex) {
+            Headers h = ex.getResponseHeaders();
+            r.headers().forEach(h::set);
+            h.set("Content-Type", r.contentType());
+            h.set("X-Accel-Buffering", "no");
+            ex.sendResponseHeaders(200, 0);
+            try (OutputStream os = ex.getResponseBody()) {
+                r.stream().run(Sse.sink(os));
+            } catch (IOException gone) {
+                // The client closed the connection.
+            } catch (Exception e) {
+                // The stream failed on its own. The client sees the connection end.
+            }
+        } finally {
+            s.release();
         }
     }
 

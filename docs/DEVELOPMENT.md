@@ -11,7 +11,7 @@ it says it was seen on a running server.
 ```
 export JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
 ./gradlew build
-RESTAPI_WRITE_DOCS=1 ./gradlew test     writes docs/SETTINGS.md again
+RESTAPI_WRITE_DOCS=1 ./gradlew test     writes docs/settings/<section>.md again
 ```
 
 The server artifact comes from `maven.hytale.com` as `compileOnly`, channel and version in `gradle.properties`.
@@ -26,7 +26,7 @@ in `build.gradle.kts` and reaches the manifest through `processResources`.
 | `config` | `Setting`, `Settings` (the registry, load, write back, refuse on a bad value), `CoreSettings` |
 | `text` | `Messages` (messages.json), `CommandText` |
 | `auth` | `Scope`, `ApiKey`, `KeyStore` (keys.json, SHA-256 of each token) |
-| `http` | `Request`, `Response`, `Call`, `Route`, `Access`, `ApiException`, `Router` (groups), `Gate` (the pipeline), `RateLimiter`, `HttpHost` (the JDK server) |
+| `http` | `Request`, `Response`, `Call`, `Route`, `RouteDoc`, `Access`, `ApiException`, `Router` (groups), `Gate` (the pipeline), `RateLimiter`, `Sse`, `HttpHost` (the JDK server) |
 | `audit` | `AuditEntry`, `AuditSink`, `AuditLog` |
 | `server` | `CoreModule` (`/api/health`, `/api/server`), `ServerFacts`, `WorldSampler`, `WorldSample`, `Health` |
 | `siblings` | `Sibling`, `Mode`, `SiblingSettings`, `PluginProbe`, `EngineProbe`, `SiblingUnit`, `Presence`, `Siblings` |
@@ -76,6 +76,15 @@ have set it first.
 11. Audit for `WRITE` and `DANGEROUS` routes, and for reads with `audit.logReads`.
 
 Every answer carries `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+
+A handler that answers `Response.stream(stream)` gets Server Sent Events. `HttpHost` gives back the in flight
+slot, takes one of `http.maxStreams` stream slots or answers 503, sends the headers with
+`X-Accel-Buffering: no` so nginx does not buffer, and runs the stream on the request's virtual thread until it
+returns or the client leaves. `Sse.format` keeps a name or id on one line and splits data on line breaks.
+
+Settings docs are one file per section under `docs/settings/`, and README rows may also live in
+`docs/readme/<module>.md`, so modules built side by side never edit the same doc file. The lead folds the
+module rows into the README at release.
 
 ## Threads
 

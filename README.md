@@ -158,7 +158,7 @@ request bodies are never written. Reads are left out unless `audit.logReads` is 
 
 Edit `mods/Ryvrook_RestAPI/RestAPI.json` and run `/restapi reload`. A file with a wrong value, such as a port
 over 65535, is refused whole and the values in use stay, and at the first start a refused file keeps the HTTP
-API down. `docs/SETTINGS.md` lists every key with its range and is checked against the code by the tests.
+API down. `docs/settings/` lists every key with its range, one file per section, checked against the code by the tests.
 
 | Key | Default | What it does |
 |---|---|---|
@@ -168,6 +168,7 @@ API down. `docs/SETTINGS.md` lists every key with its range and is checked again
 | `http.basePath` | `""` | Path prefix behind a reverse proxy that keeps it, such as `/restapi` |
 | `http.maxBodyBytes` | `65536` | Largest request body, bigger ones get 413 |
 | `http.maxInFlight` | `32` | Requests handled at once, the rest get 503 with Retry-After 1 |
+| `http.maxStreams` | `16` | Event streams open at once, for the console and event streams to come |
 | `http.requestSeconds` | `30` | Seconds a client gets to send its request. Read once per JVM, needs a restart |
 | `http.healthPublic` | `true` | Answer `/api/health` without a key |
 | `http.trustedProxies` | `[]` | Proxies whose `X-Forwarded-For` is believed, addresses or CIDR ranges |
@@ -217,7 +218,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
 ```
 
 The jar is `build/libs/RestAPI-0.1.0.jar`. The tests need no server. `RESTAPI_WRITE_DOCS=1 ./gradlew test`
-writes `docs/SETTINGS.md` again after a setting changed.
+writes `docs/settings/` again after a setting changed.
 
 ## License
 

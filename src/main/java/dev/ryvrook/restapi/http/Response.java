@@ -10,14 +10,25 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** One answer. JSON answers are compact UTF-8. */
-public record Response(int status, String contentType, byte[] body, Map<String, String> headers) {
+public record Response(int status, String contentType, byte[] body, Map<String, String> headers, Sse.Stream stream) {
     public static final String JSON = "application/json; charset=utf-8";
     public static final String TEXT = "text/plain; charset=utf-8";
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().serializeNulls().create();
 
+    public static final String EVENT_STREAM = "text/event-stream; charset=utf-8";
+
     public Response {
         body = body == null ? new byte[0] : body;
         headers = headers == null ? Map.of() : Map.copyOf(headers);
+    }
+
+    public Response(int status, String contentType, byte[] body, Map<String, String> headers) {
+        this(status, contentType, body, headers, null);
+    }
+
+    /** A Server Sent Events answer. The stream runs after the headers are sent. */
+    public static Response stream(Sse.Stream stream) {
+        return new Response(200, EVENT_STREAM, new byte[0], Map.of(), stream);
     }
 
     public static Response json(int status, JsonElement value) {
@@ -48,7 +59,7 @@ public record Response(int status, String contentType, byte[] body, Map<String, 
     public Response with(String name, String value) {
         Map<String, String> h = new LinkedHashMap<>(headers);
         h.put(name, value);
-        return new Response(status, contentType, body, h);
+        return new Response(status, contentType, body, h, stream);
     }
 
     public String bodyText() {

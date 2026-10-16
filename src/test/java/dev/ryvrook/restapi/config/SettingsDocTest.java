@@ -7,78 +7,112 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * docs/SETTINGS.md is written from the declared settings. The test fails when the file and the code disagree, or
- * when a key has no row in a README table. Run {@code RESTAPI_WRITE_DOCS=1 ./gradlew test} to write the file again.
+ * docs/settings/&lt;section&gt;.md is written from the declared settings, one file per first part of the key, so
+ * modules built side by side never touch the same file. The test fails when a file and the code disagree, when a
+ * file has no section left, or when a key has no row in a README table or in docs/readme/&lt;module&gt;.md. Run
+ * {@code RESTAPI_WRITE_DOCS=1 ./gradlew test} to write the files again.
  */
 class SettingsDocTest {
-    private static final Path DOC = Path.of("docs", "SETTINGS.md");
+    private static final Path DIR = Path.of("docs", "settings");
     private static final Path README = Path.of("README.md");
+    private static final Path README_PARTS = Path.of("docs", "readme");
 
-    static String markdown() {
+    static void loadAll() {
         Modules.load(SettingsDocTest.class.getClassLoader(), p -> { });
         CoreSettings.HTTP_PORT.key();
         SiblingSettings.CHECK_SECONDS.key();
-        StringBuilder out = new StringBuilder();
-        out.append("# RestAPI settings\n\n");
-        out.append("Every key of `mods/Ryvrook_RestAPI/RestAPI.json` with its default. Keys are dotted here and nested in the file, ")
-                .append("`http.port` is `{\"http\": {\"port\": 8125}}`. A missing key is added with its default at the next start or ")
-                .append("`/restapi reload`. A file with a wrong value is refused whole and the values in use stay. At the first start a refused file ")
-                .append("keeps the HTTP API down. This file is written by SettingsDocTest, do not edit it by hand.\n");
-        String section = null;
+    }
+
+    /** Section name to its markdown. */
+    static Map<String, String> sections() {
+        loadAll();
+        Map<String, StringBuilder> out = new LinkedHashMap<>();
         for (Setting<?> s : Settings.all()) {
             String head = s.key().substring(0, s.key().indexOf('.'));
-            if (!head.equals(section)) {
-                section = head;
-                out.append("\n## ").append(head).append("\n\n| Key | Default | Applies | Meaning |\n|---|---|---|---|\n");
-            }
-            out.append("| `").append(s.key()).append("` | `").append(Settings.toJson(s.fallback())).append("` | ")
+            StringBuilder b = out.computeIfAbsent(head, h -> new StringBuilder()
+                    .append("# ").append(h).append(" settings\n\n")
+                    .append("Keys under `").append(h).append("` in `mods/Ryvrook_RestAPI/RestAPI.json`. ")
+                    .append("Written by SettingsDocTest, do not edit by hand.\n\n")
+                    .append("| Key | Default | Applies | Meaning |\n|---|---|---|---|\n"));
+            b.append("| `").append(s.key()).append("` | `").append(Settings.toJson(s.fallback())).append("` | ")
                     .append(s.restart() ? "next start" : "reload").append(" | ")
                     .append(s.description().replace("|", "\\|"));
             if (s.kind() == Setting.Kind.INT) {
-                out.append(" Range ").append(s.min()).append(" to ").append(s.max()).append('.');
+                b.append(" Range ").append(s.min()).append(" to ").append(s.max()).append('.');
             }
-            out.append(" |\n");
+            b.append(" |\n");
         }
-        return out.toString();
+        Map<String, String> done = new LinkedHashMap<>();
+        out.forEach((k, v) -> done.put(k, v.toString()));
+        return done;
     }
 
     @Test
-    void theSettingsDocumentMatchesTheCode() throws Exception {
-        String expected = markdown();
-        if ("1".equals(System.getenv("RESTAPI_WRITE_DOCS"))) {
-            Files.writeString(DOC, expected);
+    void theSettingsFilesMatchTheCode() throws Exception {
+        Map<String, String> expected = sections();
+        boolean write = "1".equals(System.getenv("RESTAPI_WRITE_DOCS"));
+        if (write) {
+            Files.createDirectories(DIR);
         }
-        assertTrue(Files.exists(DOC), "docs/SETTINGS.md is missing, run RESTAPI_WRITE_DOCS=1 ./gradlew test");
-        assertEquals(expected, Files.readString(DOC), "docs/SETTINGS.md is out of date, run RESTAPI_WRITE_DOCS=1 ./gradlew test");
+        for (Map.Entry<String, String> e : expected.entrySet()) {
+            Path file = DIR.resolve(e.getKey() + ".md");
+            if (write) {
+                Files.writeString(file, e.getValue());
+            }
+            assertTrue(Files.exists(file), file + " is missing, run RESTAPI_WRITE_DOCS=1 ./gradlew test");
+            assertEquals(e.getValue(), Files.readString(file), file + " is out of date, run RESTAPI_WRITE_DOCS=1 ./gradlew test");
+        }
+        try (Stream<Path> files = Files.list(DIR)) {
+            for (Path f : files.toList()) {
+                String name = f.getFileName().toString().replace(".md", "");
+                if (!expected.containsKey(name)) {
+                    if (write) {
+                        Files.delete(f);
+                    } else {
+                        fail(f + " has no settings left, delete it or run RESTAPI_WRITE_DOCS=1 ./gradlew test");
+                    }
+                }
+            }
+        }
     }
 
     @Test
     void everyKeyHasAReadmeRow() throws Exception {
-        markdown();
-        String readme = Files.readString(README);
+        loadAll();
+        StringBuilder text = new StringBuilder(Files.readString(README));
+        if (Files.isDirectory(README_PARTS)) {
+            try (Stream<Path> parts = Files.list(README_PARTS)) {
+                for (Path p : parts.toList()) {
+                    text.append('\n').append(Files.readString(p));
+                }
+            }
+        }
+        String all = text.toString();
         List<String> missing = new ArrayList<>();
         for (Setting<?> s : Settings.all()) {
-            boolean row = readme.lines().anyMatch(l -> l.startsWith("|") && l.contains("`" + s.key() + "`"));
-            boolean family = s.key().startsWith("siblings.") && readme.contains("`siblings.<id>`");
+            boolean row = all.lines().anyMatch(l -> l.startsWith("|") && l.contains("`" + s.key() + "`"));
+            boolean family = s.key().startsWith("siblings.") && all.contains("`siblings.<id>`");
             if (!row && !family) {
                 missing.add(s.key());
             }
         }
-        assertTrue(missing.isEmpty(), "README has no row for " + missing.stream().collect(Collectors.joining(", ")));
+        assertTrue(missing.isEmpty(), "README and docs/readme have no row for " + String.join(", ", missing));
     }
 
     @Test
     void descriptionsFollowTheWritingRules() {
-        markdown();
+        loadAll();
         for (Setting<?> s : Settings.all()) {
             String d = s.description();
-            assertFalse(d.contains("—"), s.key() + " has an em dash");
+            assertFalse(d.contains("\u2014"), s.key() + " has an em dash");
             assertFalse(d.contains(";"), s.key() + " has a semicolon");
             assertFalse(d.contains("!"), s.key() + " has an exclamation mark");
             assertTrue(d.endsWith("."), s.key() + " should end with a full stop");
