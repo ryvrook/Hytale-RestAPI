@@ -7,7 +7,7 @@ import java.util.function.Supplier;
 
 /**
  * RestAPI reloading itself after a bound sibling came back with new classes and that sibling has no dependents pass
- * of its own, SocialBridge 0.2.0 today. Runs on a daemon thread of its own, since the scheduler is shut down by the
+ * of its own, an older copy bound under always. Runs on a daemon thread of its own, since the scheduler is shut down by the
  * reload it asks for. It waits a few seconds so the sibling finishes its start, takes the suite lock that every
  * dependents pass holds, and reloads only when the plugin manager still holds the instance that asked. When a pass
  * reloaded RestAPI meanwhile, as TrackerAPI's does after it reloaded SocialBridge, nothing is done a second time.

@@ -28,8 +28,8 @@ import java.util.function.Supplier;
  * The SocialBridge route group under /api/socialbridge, bound through {@code SocialBridgeApi.onEnable} and
  * {@code onDisable} (SocialBridge 0.2.0 and newer). A bot or a panel can look up which Discord user is linked to a
  * player and the other way round, and post a line or an embed to one of SocialBridge's channels under
- * {@code socialbridge.write}. SocialBridge 0.2.0 does not reload the plugins that list it, so after a reload of
- * SocialBridge RestAPI reloads itself, see {@link dev.ryvrook.restapi.siblings.Siblings}.
+ * {@code socialbridge.write}. SocialBridge reloads the plugins that list it after its own reload, RestAPI among
+ * them.
  */
 public final class SocialBridgeRoutes implements SiblingUnit {
     static final String GROUP = Sibling.SOCIALBRIDGE.group();

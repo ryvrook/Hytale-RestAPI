@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * <p>A sibling that was bound and then reloaded brings new classes that the unit already linked against the old
  * ones cannot use. Every suite mod from {@link Sibling#hooksSince()} on reloads its dependents, RestAPI among them,
  * so the group comes back by itself and the unbind in between is logged at the quiet level only. For a sibling
- * without that pass, SocialBridge 0.2.0 or an older copy bound under always, RestAPI reloads itself through
+ * without that pass, an older copy bound under always, RestAPI reloads itself through
  * {@link #onStaleLink}.
  */
 public final class Siblings {
@@ -90,8 +90,8 @@ public final class Siblings {
     }
 
     /**
-     * What reloads RestAPI when a bound sibling was reloaded and that version has no dependents pass, such as
-     * SocialBridge 0.2.0. Asked once per RestAPI instance, the next instance binds the new classes on its own.
+     * What reloads RestAPI when a bound sibling was reloaded and that version has no dependents pass, an older
+     * copy bound under always. Asked once per RestAPI instance, the next instance binds the new classes on its own.
      */
     public void onStaleLink(Consumer<Sibling> relink) {
         this.relink = relink;

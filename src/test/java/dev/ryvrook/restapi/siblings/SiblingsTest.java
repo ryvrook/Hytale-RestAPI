@@ -156,14 +156,16 @@ class SiblingsTest {
     void aReloadOfASiblingWithoutAPassReloadsRestApiOnceAndStaysQuiet() {
         List<String> quiet = new ArrayList<>();
         List<Sibling> relinks = new ArrayList<>();
-        installed.put(Sibling.SOCIALBRIDGE, running("0.2.0"));
-        Siblings s = new Siblings(installed::get, router, Unit::new, x -> Mode.AUTO, () -> null, log::add, quiet::add);
+        modes.put(Sibling.SOCIALBRIDGE, Mode.ALWAYS);
+        installed.put(Sibling.SOCIALBRIDGE, running("0.1.0"));
+        Siblings s = new Siblings(installed::get, router, Unit::new, x -> modes.getOrDefault(x, Mode.AUTO), () -> null,
+                log::add, quiet::add);
         s.onStaleLink(relinks::add);
         s.check();
         assertEquals(1, log.size());
-        installed.put(Sibling.SOCIALBRIDGE, new PluginProbe.Found(new Object(), "0.2.0", "SHUTDOWN"));
+        installed.put(Sibling.SOCIALBRIDGE, new PluginProbe.Found(new Object(), "0.1.0", "SHUTDOWN"));
         s.check();
-        installed.put(Sibling.SOCIALBRIDGE, running("0.2.0"));
+        installed.put(Sibling.SOCIALBRIDGE, running("0.1.0"));
         s.check();
         s.check();
         assertEquals(List.of(Sibling.SOCIALBRIDGE), relinks, "asked once");
@@ -191,7 +193,7 @@ class SiblingsTest {
         assertTrue(Sibling.FEATS.reloadsDependents("1.10.0"));
         assertFalse(Sibling.FEATS.reloadsDependents("1.6.0"));
         assertFalse(Sibling.FEATS.reloadsDependents(null));
-        assertFalse(Sibling.SOCIALBRIDGE.reloadsDependents("0.2.0"), "SocialBridge has no dependents pass yet");
+        assertTrue(Sibling.SOCIALBRIDGE.reloadsDependents("0.2.0"));
         for (Sibling x : Sibling.values()) {
             if (x.hooksSince() == null) {
                 continue;
