@@ -165,10 +165,8 @@ class CoinageRoutesTest {
     }
 
     @Test
-    void theRegistryOfThisBuildDecidesWhetherWritesMount() {
-        boolean known = java.util.Arrays.stream(dev.ryvrook.restapi.siblings.Sibling.class.getMethods())
-                .anyMatch(m -> m.getName().equals("writeScope"));
-        assertEquals(known, CoinageRoutes.writeScopeAccepted());
+    void theRegistryAcceptsTheWriteScope() {
+        assertTrue(CoinageRoutes.writeScopeAccepted());
     }
 
     @Test

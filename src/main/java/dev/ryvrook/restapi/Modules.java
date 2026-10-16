@@ -20,7 +20,8 @@ public final class Modules {
             "dev.ryvrook.restapi.control.ControlModule",
             "dev.ryvrook.restapi.events.EventsModule",
             "dev.ryvrook.restapi.docs.DocsModule",
-            "dev.ryvrook.restapi.rcon.RconModule");
+            "dev.ryvrook.restapi.rcon.RconModule",
+            "dev.ryvrook.restapi.suite.SuiteModule");
 
     /** Makes every module this build holds. Problems other than a missing class go to the consumer. */
     public static List<RestModule> load(ClassLoader loader, Consumer<String> problems) {

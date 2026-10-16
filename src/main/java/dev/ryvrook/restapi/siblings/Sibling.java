@@ -12,9 +12,9 @@ public enum Sibling {
     TRACKER("tracker", "TrackerAPI", "1.1.0", Scope.TRACKER, "dev.ryvrook.restapi.suite.tracker.TrackerRoutes",
             "Counters, leaderboards, recent events and the journal under /api/tracker"),
     COINAGE("coinage", "Coinage", "1.2.0", Scope.COINAGE, "dev.ryvrook.restapi.suite.coinage.CoinageRoutes",
-            "Balances, accounts, ledger moves and the rich list under /api/coinage"),
+            "Balances, accounts, ledger moves and the rich list under /api/coinage", Scope.COINAGE_WRITE),
     DOMINION("dominion", "Dominion", "0.6.2", Scope.DOMINION, "dev.ryvrook.restapi.suite.dominion.DominionRoutes",
-            "Factions, claims, sieges and relations under /api/dominion"),
+            "Factions, claims, sieges and relations under /api/dominion", Scope.DOMINION_WRITE),
     FEATS("feats", "Feats", "1.6.0", Scope.FEATS, "dev.ryvrook.restapi.suite.feats.FeatsRoutes",
             "Feat progress, unlocks and world records under /api/feats"),
     CHRONICLE("chronicle", "ChronicleStats", "1.4.0", Scope.CHRONICLE, "dev.ryvrook.restapi.suite.chronicle.ChronicleRoutes",
@@ -32,8 +32,14 @@ public enum Sibling {
     private final Scope scope;
     private final String unitClass;
     private final String adds;
+    private final Scope writeScope;
 
     Sibling(String id, String pluginName, String minimum, Scope scope, String unitClass, String adds) {
+        this(id, pluginName, minimum, scope, unitClass, adds, null);
+    }
+
+    Sibling(String id, String pluginName, String minimum, Scope scope, String unitClass, String adds, Scope writeScope) {
+        this.writeScope = writeScope;
         this.id = id;
         this.pluginName = pluginName;
         this.minimum = minimum;
@@ -62,6 +68,11 @@ public enum Sibling {
 
     public Scope scope() {
         return scope;
+    }
+
+    /** The scope of the group's write routes, such as coinage.write, or null when the group only reads. */
+    public Scope writeScope() {
+        return writeScope;
     }
 
     /** The class of the route group, loaded by name only after the presence check passed. */

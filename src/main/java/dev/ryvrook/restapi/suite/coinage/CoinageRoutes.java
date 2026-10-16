@@ -93,17 +93,9 @@ public final class CoinageRoutes implements SiblingUnit {
         replays.clear();
     }
 
-    /**
-     * True when the sibling registry accepts the coinage.write scope in this group. RestAPI 0.1.0 checks every
-     * suite route against the read scope alone, the registry that knows a write scope per sibling has
-     * {@code Sibling.writeScope()}.
-     */
+    /** True when the sibling registry accepts the coinage.write scope in this group. */
     static boolean writeScopeAccepted() {
-        try {
-            return Sibling.class.getMethod("writeScope").invoke(Sibling.COINAGE) == WRITE;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return false;
-        }
+        return Sibling.COINAGE.writeScope() == WRITE;
     }
 
     static List<Route> routes(Supplier<CoinageApi> source, Supplier<Limits> limits, boolean writes,

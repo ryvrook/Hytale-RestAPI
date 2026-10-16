@@ -163,6 +163,21 @@ class SiblingsTest {
     }
 
     @Test
+    void aWriteScopeIsAcceptedOnlyWhereTheSiblingHasOne() {
+        installed.put(Sibling.COINAGE, running("1.2.0"));
+        installed.put(Sibling.FEATS, running("1.6.0"));
+        SiblingUnit coinage = api -> List.of(Route.of("suite.coinage", "POST", "/api/coinage/give", Scope.COINAGE_WRITE,
+                Access.DANGEROUS, "x", c -> Response.text(200, "")));
+        SiblingUnit feats = api -> List.of(Route.of("suite.feats", "POST", "/api/feats/x", Scope.COINAGE_WRITE,
+                Access.DANGEROUS, "x", c -> Response.text(200, "")));
+        Siblings s = new Siblings(installed::get, router, x -> x == Sibling.COINAGE ? coinage : feats, x -> Mode.AUTO,
+                () -> null, log::add);
+        s.check();
+        assertTrue(s.presence(Sibling.COINAGE).bound());
+        assertFalse(s.presence(Sibling.FEATS).bound());
+    }
+
+    @Test
     void aUnitThatThrowsIsRetriedOnTheNextCheck() {
         installed.put(Sibling.TRACKER, running("1.1.0"));
         int[] tries = {0};

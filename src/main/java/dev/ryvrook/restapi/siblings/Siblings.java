@@ -177,7 +177,8 @@ public final class Siblings {
             return "binding failed, " + e;
         }
         for (Route r : routes) {
-            if (!r.group().equals(s.group()) || r.scope() != s.scope() || !r.pattern().startsWith("/api/" + s.id() + "/")
+            boolean scopeOk = r.scope() == s.scope() || s.writeScope() != null && r.scope() == s.writeScope();
+            if (!r.group().equals(s.group()) || !scopeOk || !r.pattern().startsWith("/api/" + s.id() + "/")
                     && !r.pattern().equals("/api/" + s.id())) {
                 unit.unbind();
                 return "route " + r.method() + " " + r.pattern() + " is outside /api/" + s.id()
