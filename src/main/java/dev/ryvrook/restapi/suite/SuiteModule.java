@@ -27,8 +27,7 @@ public final class SuiteModule implements RestModule {
     static final Map<Sibling, List<String>> WAITING = Map.of(
             Sibling.TRACKER, List.of(),
             Sibling.COINAGE, List.of(),
-            Sibling.DOMINION, List.of("Staff actions under dominion.write", "A list of every faction including safe and war zones",
-                    "Sieges with both sides and the phase, today they come from the siege banners"),
+            Sibling.DOMINION, List.of(),
             Sibling.FEATS, List.of("A points leaderboard call, today it comes from export/feats.json"),
             Sibling.CHRONICLE, List.of("Boards per window and the server series, today the all time boards come from export/stats.json"),
             Sibling.ATLAS, List.of("Render status and the worlds rendered"),

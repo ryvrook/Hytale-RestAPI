@@ -36,6 +36,9 @@ public final class SuiteSettings {
     public static final Setting<Boolean> DOMINION_HOMES = Settings.bool("suite.dominion.homesAndWarps", true,
             "Include faction homes and warps in GET /api/dominion/points and in the faction detail.");
 
+    public static final Setting<Boolean> DOMINION_WRITES = Settings.bool("suite.dominion.writes", true,
+            "Mount the Dominion staff routes (disband, leader, power, unclaim, unclaim all) for keys with the dominion.write scope. Applies on the next bind.");
+
     public static final Setting<Boolean> ATLAS_PROBE = Settings.bool("suite.atlas.probe", true,
             "GET /api/atlas asks the Atlas web server for its own /api/health on the loopback address.");
 

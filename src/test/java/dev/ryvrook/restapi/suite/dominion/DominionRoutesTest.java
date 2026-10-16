@@ -5,13 +5,17 @@ import com.google.gson.JsonObject;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import dev.ryvrook.dominion.api.DominionApi;
 import dev.ryvrook.dominion.api.PointOfInterest;
+import dev.ryvrook.dominion.api.Result;
+import dev.ryvrook.dominion.api.SiegeInfo;
 import dev.ryvrook.dominion.api.Territory;
 import dev.ryvrook.dominion.api.TerritoryProvider;
 import dev.ryvrook.dominion.model.Faction;
+import dev.ryvrook.dominion.model.FactionType;
 import dev.ryvrook.dominion.model.Location;
 import dev.ryvrook.dominion.model.Member;
 import dev.ryvrook.dominion.model.Rank;
 import dev.ryvrook.dominion.model.Relation;
+import dev.ryvrook.restapi.audit.AuditEntry;
 import dev.ryvrook.restapi.auth.Scope;
 import dev.ryvrook.restapi.http.Access;
 import dev.ryvrook.restapi.http.Response;
@@ -21,6 +25,8 @@ import dev.ryvrook.restapi.suite.Limits;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,8 +41,13 @@ class DominionRoutesTest {
 
     Faction north;
     Faction south;
+    Faction safe;
     AtomicBoolean homes;
     Calls calls;
+    Map<String, java.util.function.Function<Object[], Object>> answers;
+    List<String> staff;
+    List<AuditEntry> audit;
+    SiegeInfo siege;
 
     @BeforeEach
     void setUp() {
@@ -58,7 +69,40 @@ class DominionRoutesTest {
                         new PointOfInterest("home:" + north.id(), "home", "NRT home", "default", 1, 64, 2, north.id(), "#3366ff", 0L),
                         new PointOfInterest("siege:1", "siege", "SOU attacks NRT", "default", 40, 70, 40, south.id(), "#ff3333", 99L))
                         : List.of()));
-        DominionApi api = Calls.stand(DominionApi.class, Map.ofEntries(
+        safe = new Faction(UUID.fromString("00000000-0000-0000-0000-0000000000f3"), "SAFE", "Spawn", null, 1L);
+        safe.setType(FactionType.SAFEZONE);
+        siege = new SiegeInfo(UUID.fromString("00000000-0000-0000-0000-0000000000a1"), south.id(), "SOU", north.id(), "NRT",
+                "default", ChunkUtil.indexChunk(3, -4), 3, -4, 100.5, 70, -120.5, "CAPTURING", 99L, 50L, ALEX, true, 4, 1, 0, 2);
+        staff = new ArrayList<>();
+        audit = new ArrayList<>();
+        answers = new HashMap<>(Map.ofEntries(
+                Map.entry("factions", a -> List.of(north, safe, south)),
+                Map.entry("sieges", a -> List.of(siege)),
+                Map.entry("siegeHistory", a -> {
+                    staff.add("history " + a[0] + " " + a[1]);
+                    return List.of(siege);
+                }),
+                Map.entry("disband", a -> {
+                    staff.add("disband " + a[0] + " " + a[1]);
+                    return Result.pass("North Watch was disbanded.");
+                }),
+                Map.entry("setLeader", a -> {
+                    staff.add("leader " + a[0] + " " + a[1] + " " + a[2]);
+                    return Result.fail("Alex is not a member of North Watch.");
+                }),
+                Map.entry("setPower", a -> {
+                    staff.add("power " + a[0] + " " + a[1] + " " + a[2]);
+                    return Result.pass("Power set.");
+                }),
+                Map.entry("unclaim", a -> {
+                    staff.add("unclaim " + a[0] + " " + a[1] + " " + a[2] + " " + a[3]);
+                    return Result.pass("Unclaimed.");
+                }),
+                Map.entry("unclaimAll", a -> {
+                    staff.add("unclaimAll " + a[0] + " " + a[1]);
+                    return Result.pass("Released 2 claims.");
+                })));
+        answers.putAll(Map.ofEntries(
                 Map.entry("top", a -> List.of(north, south)),
                 Map.entry("factionByTag", a -> List.of(north, south).stream().filter(f -> f.tag().equalsIgnoreCase((String) a[0])).findFirst()),
                 Map.entry("factionOf", a -> STEVE.equals(a[0]) ? Optional.of(north) : ALEX.equals(a[0]) ? Optional.of(south) : Optional.empty()),
@@ -69,7 +113,23 @@ class DominionRoutesTest {
                 Map.entry("raidable", a -> south.id().equals(a[0])),
                 Map.entry("territoryProvider", a -> tp)));
         homes = new AtomicBoolean(true);
-        calls = new Calls(DominionRoutes.routes(() -> api, () -> List.of("default", "nether"), homes::get, () -> Limits.DEFAULTS));
+        calls = make();
+    }
+
+    Calls make() {
+        DominionApi api = Calls.stand(DominionApi.class, answers);
+        return new Calls(DominionRoutes.routes(() -> api, () -> List.of("default", "nether"), homes::get,
+                () -> Limits.DEFAULTS, true, audit::add));
+    }
+
+    /** A Dominion before 0.7.0, whose API has none of the calls 0.7.0 added. */
+    Calls older() {
+        for (String m : List.of("factions", "sieges", "siegeHistory", "disband", "setLeader", "setPower", "unclaim", "unclaimAll")) {
+            answers.put(m, a -> {
+                throw new NoSuchMethodError("DominionApi." + m);
+            });
+        }
+        return make();
     }
 
     @Test
@@ -82,17 +142,42 @@ class DominionRoutesTest {
     }
 
     @Test
+    void staffRoutesNeedTheWriteScope() {
+        List<Route> all = DominionRoutes.routes(() -> null, List::of, () -> true, () -> Limits.DEFAULTS, true, e -> { });
+        List<Route> writes = all.stream().filter(r -> r.method().equals("POST")).toList();
+        assertEquals(5, writes.size());
+        for (Route r : writes) {
+            assertEquals(Scope.DOMINION_WRITE, r.scope());
+            assertEquals(Access.DANGEROUS, r.access());
+            assertTrue(r.pattern().startsWith("/api/dominion/"), r.pattern());
+        }
+    }
+
+    @Test
     void summaryCountsFactionsMembersAndClaims() {
         JsonObject o = Calls.json(calls.get("/api/dominion"));
         assertEquals(2, o.get("factions").getAsInt());
+        assertEquals(1, o.get("zones").getAsInt());
         assertEquals(2, o.get("members").getAsInt());
         assertEquals(3, o.get("claims").getAsInt());
         assertEquals("default", o.getAsJsonArray("worldsWithClaims").get(0).getAsString());
     }
 
     @Test
+    void theListHoldsTheZonesAfterTheRanking() {
+        JsonArray rows = Calls.json(calls.get("/api/dominion/factions")).getAsJsonArray("factions");
+        assertEquals(3, rows.size());
+        JsonObject zone = rows.get(2).getAsJsonObject();
+        assertEquals("SAFE", zone.get("tag").getAsString());
+        assertEquals("safezone", zone.get("type").getAsString());
+        assertTrue(zone.get("rank").isJsonNull());
+        assertEquals(2, Calls.json(calls.get("/api/dominion/factions?zones=false")).get("total").getAsInt());
+        assertEquals(2, Calls.json(older().get("/api/dominion/factions")).get("total").getAsInt(), "an older Dominion has no zones");
+    }
+
+    @Test
     void factionsPageInRankingOrder() {
-        JsonObject o = Calls.json(calls.get("/api/dominion/factions?limit=1&offset=1"));
+        JsonObject o = Calls.json(calls.get("/api/dominion/factions?limit=1&offset=1&zones=false"));
         assertEquals(2, o.get("total").getAsInt());
         JsonObject row = o.getAsJsonArray("factions").get(0).getAsJsonObject();
         assertEquals("SOU", row.get("tag").getAsString());
@@ -133,11 +218,63 @@ class DominionRoutesTest {
     }
 
     @Test
-    void siegesAreTheSiegeBanners() {
-        JsonArray s = Calls.json(calls.get("/api/dominion/sieges")).getAsJsonArray("sieges");
+    void siegesHaveBothSidesAndThePhase() {
+        JsonObject o = Calls.json(calls.get("/api/dominion/sieges"));
+        assertTrue(o.get("sidesKnown").getAsBoolean());
+        JsonObject s = o.getAsJsonArray("sieges").get(0).getAsJsonObject();
+        assertEquals("SOU", s.getAsJsonObject("attacker").get("tag").getAsString());
+        assertEquals("NRT", s.getAsJsonObject("defender").get("tag").getAsString());
+        assertEquals("capturing", s.get("phase").getAsString());
+        assertEquals(99L, s.get("phaseEndsAt").getAsLong());
+        assertEquals(-4, s.getAsJsonArray("chunk").get(1).getAsInt());
+        assertEquals(0, Calls.json(calls.get("/api/dominion/sieges?world=nether")).getAsJsonArray("sieges").size());
+        JsonObject h = Calls.json(calls.get("/api/dominion/sieges/history?faction=NRT&limit=5"));
+        assertEquals(1, h.getAsJsonArray("sieges").size());
+        assertEquals("history " + north.id() + " 5", staff.getFirst());
+        assertEquals(404, calls.get("/api/dominion/sieges/history?faction=XYZ").status());
+    }
+
+    @Test
+    void anOlderDominionGivesTheSiegeBanners() {
+        Calls calls = older();
+        JsonObject o = Calls.json(calls.get("/api/dominion/sieges"));
+        assertFalse(o.get("sidesKnown").getAsBoolean());
+        JsonArray s = o.getAsJsonArray("sieges");
         assertEquals(1, s.size());
         assertEquals("SOU", s.get(0).getAsJsonObject().get("faction").getAsString());
         assertEquals(99L, s.get(0).getAsJsonObject().get("endsAt").getAsLong());
+        assertEquals(501, calls.get("/api/dominion/sieges/history").status());
+        assertEquals(501, calls.post("/api/dominion/factions/NRT/disband", "").status());
+    }
+
+    @Test
+    void staffActionsNameTheKeyAndLeaveAnAuditLine() {
+        var r = calls.post("/api/dominion/factions/nrt/disband", "");
+        assertEquals(200, r.status(), r.bodyText());
+        assertEquals("disband " + north.id() + " RestAPI:grafana", staff.getFirst());
+        assertTrue(Calls.json(r).get("ok").getAsBoolean());
+        assertEquals("dominion disband", audit.getFirst().action());
+        assertEquals("grafana", audit.getFirst().key());
+
+        var refused = calls.post("/api/dominion/factions/NRT/leader", "{\"player\":\"Alex\"}");
+        assertEquals(409, refused.status());
+        assertEquals("refused", Calls.json(refused).get("error").getAsString());
+        assertEquals("Alex is not a member of North Watch.", Calls.json(refused).get("message").getAsString());
+        assertEquals("leader " + north.id() + " " + ALEX + " RestAPI:grafana", staff.get(1));
+        assertEquals(409, audit.get(1).status());
+        assertEquals(400, calls.post("/api/dominion/factions/NRT/leader", "{}").status());
+
+        assertEquals(200, calls.post("/api/dominion/players/Steve/power", "{\"power\":12.5}").status());
+        assertEquals("power " + STEVE + " 12.5 RestAPI:grafana", staff.get(2));
+        assertEquals(400, calls.post("/api/dominion/players/Steve/power", "{\"power\":\"lots\"}").status());
+
+        assertEquals(200, calls.post("/api/dominion/unclaim", "{\"world\":\"default\",\"chunkX\":3,\"chunkZ\":-4}").status());
+        assertEquals("unclaim default 3 -4 RestAPI:grafana", staff.get(3));
+        assertEquals(400, calls.post("/api/dominion/unclaim", "{\"world\":\"default\",\"chunkX\":3.5,\"chunkZ\":1}").status());
+
+        assertEquals(200, calls.post("/api/dominion/factions/SOU/unclaim-all", "").status());
+        assertEquals("unclaimAll " + south.id() + " RestAPI:grafana", staff.get(4));
+        assertEquals(404, calls.post("/api/dominion/factions/XYZ/disband", "").status());
     }
 
     @Test

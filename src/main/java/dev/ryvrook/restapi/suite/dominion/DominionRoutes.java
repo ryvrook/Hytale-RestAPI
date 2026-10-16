@@ -5,13 +5,18 @@ import com.google.gson.JsonObject;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import dev.ryvrook.dominion.api.DominionApi;
 import dev.ryvrook.dominion.api.PointOfInterest;
+import dev.ryvrook.dominion.api.Result;
+import dev.ryvrook.dominion.api.SiegeInfo;
 import dev.ryvrook.dominion.api.Territory;
 import dev.ryvrook.dominion.api.TerritoryProvider;
 import dev.ryvrook.dominion.model.Faction;
+import dev.ryvrook.dominion.model.FactionType;
 import dev.ryvrook.dominion.model.Location;
 import dev.ryvrook.dominion.model.Member;
 import dev.ryvrook.dominion.model.Relation;
 import dev.ryvrook.restapi.RestApi;
+import dev.ryvrook.restapi.audit.AuditEntry;
+import dev.ryvrook.restapi.audit.AuditSink;
 import dev.ryvrook.restapi.auth.Scope;
 import dev.ryvrook.restapi.http.Access;
 import dev.ryvrook.restapi.http.ApiException;
@@ -28,6 +33,9 @@ import dev.ryvrook.restapi.suite.Names;
 import dev.ryvrook.restapi.suite.SuiteSettings;
 import dev.ryvrook.restapi.suite.SuiteText;
 
+import com.google.gson.JsonElement;
+
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -39,29 +47,82 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * The Dominion route group under /api/dominion, reads only. Dominion has no enable hook, so the unit binds from
- * {@code DominionApi.get()} and reads it again on every request, which answers 503 once Dominion stopped. Faction
- * objects and the repository behind the API are thread safe in Dominion. Staff actions wait for a Dominion
- * API that defines them.
+ * The Dominion route group under /api/dominion. Binds through {@code DominionApi.onEnable} and {@code onDisable}
+ * (Dominion 0.7.0 and newer), so the API object is the one Dominion handed out last. An older Dominion bound under
+ * always is read through {@code DominionApi.get()} on every request and answers what its API had: the ranked
+ * factions only, sieges from the siege banners and no staff actions. Faction objects and the repository behind the
+ * API are thread safe in Dominion. The staff routes need dominion.write and name the key as the caller, which
+ * Dominion writes to the faction log and to one server log line.
  */
 public final class DominionRoutes implements SiblingUnit {
     static final String GROUP = Sibling.DOMINION.group();
     static final Scope SCOPE = Sibling.DOMINION.scope();
+    static final Scope WRITE = Scope.DOMINION_WRITE;
     static final String MOD = "Dominion";
+
+    private volatile DominionApi current;
+    private Consumer<DominionApi> enableHook;
+    private Runnable disableHook;
 
     @Override
     public List<Route> bind(RestApi api) {
-        if (DominionApi.get() == null) {
-            throw new IllegalStateException("Dominion has not published its API yet");
+        Supplier<DominionApi> source = hooks();
+        boolean writes = SuiteSettings.DOMINION_WRITES.get() && Sibling.DOMINION.writeScope() == WRITE;
+        return routes(source, Folders::worlds, SuiteSettings.DOMINION_HOMES::get, Limits.live(), writes, api.audit());
+    }
+
+    private Supplier<DominionApi> hooks() {
+        Consumer<DominionApi> enable = d -> current = d;
+        Runnable disable = () -> current = null;
+        try {
+            DominionApi.onEnable(enable);
+            DominionApi.onDisable(disable);
+        } catch (NoSuchMethodError e) {
+            // Dominion before 0.7.0 has no hooks and get() throws until it started.
+            if (older() == null) {
+                throw new IllegalStateException("Dominion has not published its API yet");
+            }
+            return DominionRoutes::older;
         }
-        return routes(DominionApi::get, Folders::worlds, SuiteSettings.DOMINION_HOMES::get, Limits.live());
+        enableHook = enable;
+        disableHook = disable;
+        if (current == null) {
+            unbind();
+            throw new IllegalStateException("Dominion has not handed out its API yet");
+        }
+        return () -> current;
+    }
+
+    @Override
+    public void unbind() {
+        if (enableHook != null) {
+            DominionApi.removeHooks(enableHook, disableHook);
+            enableHook = null;
+            disableHook = null;
+        }
+        current = null;
+    }
+
+    private static DominionApi older() {
+        try {
+            return DominionApi.get();
+        } catch (IllegalStateException e) {
+            return null;
+        }
     }
 
     static List<Route> routes(Supplier<DominionApi> source, Supplier<List<String>> worlds, BooleanSupplier homes,
                               Supplier<Limits> limits) {
+        return routes(source, worlds, homes, limits, false, null);
+    }
+
+    static List<Route> routes(Supplier<DominionApi> source, Supplier<List<String>> worlds, BooleanSupplier homes,
+                              Supplier<Limits> limits, boolean writes, AuditSink audit) {
         Supplier<DominionApi> api = () -> {
             DominionApi d = source.get();
             if (d == null) {
@@ -71,13 +132,14 @@ public final class DominionRoutes implements SiblingUnit {
         };
         List<Route> out = new ArrayList<>();
         out.add(Route.of(GROUP, "GET", "/api/dominion", SCOPE, Access.READ,
-                "How many factions, members and claims Dominion holds, and in which worlds.",
+                "How many factions, safe and war zones, members and claims Dominion holds, and in which worlds.",
                 call -> summary(api.get(), worlds.get())));
         out.add(Route.of(GROUP, "GET", "/api/dominion/factions", SCOPE, Access.READ,
-                "Factions in Dominion's ranking order with power, claims, members and bank.",
+                "Every faction, in Dominion's ranking order, then the safe and war zones, with power, claims, members and bank.",
                 call -> factions(api.get(), call, limits.get())).doc(new RouteDoc(
-                List.of(new RouteDoc.Param("limit", "Rows"), new RouteDoc.Param("offset", "Rows to skip")), null,
-                "{\"total\":3,\"limit\":50,\"offset\":0,\"factions\":[{\"rank\":1,\"tag\":\"NRT\",\"name\":\"North Watch\",\"power\":48.5,\"claims\":12,\"members\":5,\"bank\":1200.0}]}",
+                List.of(new RouteDoc.Param("limit", "Rows"), new RouteDoc.Param("offset", "Rows to skip"),
+                        new RouteDoc.Param("zones", "false leaves the safe and war zones out")), null,
+                "{\"total\":3,\"limit\":50,\"offset\":0,\"factions\":[{\"rank\":1,\"tag\":\"NRT\",\"name\":\"North Watch\",\"type\":\"normal\",\"power\":48.5,\"claims\":12,\"members\":5,\"bank\":1200.0}]}",
                 List.of())));
         out.add(Route.of(GROUP, "GET", "/api/dominion/factions/{tag}", SCOPE, Access.READ,
                 "One faction by tag with its members and ranks, relations, upgrades, statistics and home.",
@@ -91,8 +153,17 @@ public final class DominionRoutes implements SiblingUnit {
                 "{\"territories\":[{\"faction\":\"NRT\",\"world\":\"default\",\"type\":\"normal\",\"raidable\":false,\"breached\":false,\"count\":2,\"chunks\":[[3,-4],[3,-5]]}]}",
                 List.of("unknown_world"))));
         out.add(Route.of(GROUP, "GET", "/api/dominion/sieges", SCOPE, Access.READ,
-                "Sieges running now, with the attacker, the banner position and when the phase ends.",
-                call -> points(api.get(), call, worlds.get(), "siege", true)));
+                "Sieges running now, oldest first, with both sides, the phase and when it ends, the banner and the counts.",
+                call -> sieges(api.get(), call, worlds.get())).doc(new RouteDoc(
+                List.of(new RouteDoc.Param("world", "One world")), null,
+                "{\"sidesKnown\":true,\"sieges\":[{\"id\":\"...\",\"attacker\":{\"id\":\"...\",\"tag\":\"SOU\"},\"defender\":{\"id\":\"...\",\"tag\":\"NRT\"},\"world\":\"default\",\"chunk\":[3,-4],\"phase\":\"capturing\",\"phaseEndsAt\":1760620000000,\"active\":true}]}",
+                List.of("unknown_world"))));
+        out.add(Route.of(GROUP, "GET", "/api/dominion/sieges/history", SCOPE, Access.READ,
+                "Finished sieges, newest first, of one faction or all of them.",
+                call -> siegeHistory(api.get(), call, limits.get())).doc(new RouteDoc(
+                List.of(new RouteDoc.Param("faction", "A faction tag, every faction when missing"),
+                        new RouteDoc.Param("limit", "Rows")), null, null,
+                List.of("faction_not_found", "not_supported"))));
         out.add(Route.of(GROUP, "GET", "/api/dominion/points", SCOPE, Access.READ,
                 "Points Dominion puts on maps, homes, warps, siege banners, hills, outposts and envoys.",
                 call -> points(api.get(), call, worlds.get(), call.query("kind", null), homes.getAsBoolean())).doc(new RouteDoc(
@@ -111,12 +182,139 @@ public final class DominionRoutes implements SiblingUnit {
                 call -> at(api.get(), call)).doc(new RouteDoc(
                 List.of(new RouteDoc.Param("world", "World name"), new RouteDoc.Param("x", "Block x"),
                         new RouteDoc.Param("z", "Block z")), null, null, List.of("missing_coordinates"))));
+        if (writes) {
+            out.add(write(api, audit, "/api/dominion/factions/{tag}/disband", "disband",
+                    "Disbands a faction as /fa force disband does, the bank paid out the same way.", null,
+                    (d, call, body, by) -> d.disband(byTag(d, call.param("tag")).id(), by)));
+            out.add(write(api, audit, "/api/dominion/factions/{tag}/leader", "leader",
+                    "Makes a member the leader of the faction.", "{\"player\":\"Steve\"}",
+                    (d, call, body, by) -> d.setLeader(byTag(d, call.param("tag")).id(),
+                            names(d).resolve(need(body, "player", "missing_player", SuiteText.NEED_PLAYER)), by)));
+            out.add(write(api, audit, "/api/dominion/factions/{tag}/unclaim-all", "unclaim all",
+                    "Releases every claim of the faction in every world.", null,
+                    (d, call, body, by) -> d.unclaimAll(byTag(d, call.param("tag")).id(), by)));
+            out.add(write(api, audit, "/api/dominion/players/{player}/power", "power",
+                    "Sets a player's power, clamped to their maximum. Dominion refuses a player it never saw.",
+                    "{\"power\":10.0}",
+                    (d, call, body, by) -> d.setPower(names(d).resolve(call.param("player")), power(body), by)));
+            out.add(write(api, audit, "/api/dominion/unclaim", "unclaim",
+                    "Releases one claimed chunk, given in chunk coordinates.",
+                    "{\"world\":\"default\",\"chunkX\":3,\"chunkZ\":-4}",
+                    (d, call, body, by) -> d.unclaim(need(body, "world", "missing_chunk", SuiteText.NEED_CHUNK),
+                            whole(body, "chunkX"), whole(body, "chunkZ"), by)));
+        }
         return out;
+    }
+
+    /** One staff action on the Dominion API. */
+    interface Action {
+        Result run(DominionApi d, Call call, JsonObject body, String by);
+    }
+
+    private static Route write(Supplier<DominionApi> api, AuditSink audit, String pattern, String verb, String summary,
+                               String example, Action action) {
+        return Route.of(GROUP, "POST", pattern, WRITE, Access.DANGEROUS, summary,
+                call -> act(api.get(), call, verb, action, audit)).doc(new RouteDoc(List.of(), example,
+                "{\"ok\":true,\"message\":\"North Watch was disbanded.\"}",
+                List.of("faction_not_found", "player_not_found", "refused", "not_supported")));
+    }
+
+    /** The caller name Dominion writes to its faction log and server log line. */
+    static String by(Call call) {
+        return "RestAPI:" + call.keyName();
+    }
+
+    static Response act(DominionApi d, Call call, String verb, Action action, AuditSink audit) {
+        JsonObject body = call.jsonBody();
+        Result r;
+        try {
+            r = action.run(d, call, body, by(call));
+        } catch (NoSuchMethodError | AbstractMethodError e) {
+            throw new ApiException(501, "not_supported", SuiteText.get(SuiteText.NO_STAFF));
+        }
+        JsonObject o = new JsonObject();
+        boolean ok = r != null && r.success();
+        o.addProperty("ok", ok);
+        o.addProperty("message", r == null ? null : r.message());
+        int status = ok ? 200 : 409;
+        if (!ok) {
+            o.addProperty("error", "refused");
+        }
+        if (audit != null) {
+            audit.record(new AuditEntry(Instant.now().toString(), "http", call.keyName(), call.client(),
+                    "dominion " + verb, status, r == null ? "" : r.message()));
+        }
+        return Response.json(status, o);
+    }
+
+    private static String need(JsonObject body, String field, String code, String text) {
+        JsonElement e = body.get(field);
+        if (e == null || e.isJsonNull() || !e.isJsonPrimitive() || e.getAsString().isBlank()) {
+            throw ApiException.badRequest(code, SuiteText.get(text));
+        }
+        return e.getAsString().trim();
+    }
+
+    private static double power(JsonObject body) {
+        JsonElement e = body.get("power");
+        try {
+            double v = e == null || e.isJsonNull() ? Double.NaN : e.getAsDouble();
+            if (!Double.isFinite(v)) {
+                throw new NumberFormatException();
+            }
+            return v;
+        } catch (RuntimeException ex) {
+            throw ApiException.badRequest("bad_power", SuiteText.get(SuiteText.NEED_POWER));
+        }
+    }
+
+    private static int whole(JsonObject body, String field) {
+        JsonElement e = body.get(field);
+        try {
+            if (e == null || e.isJsonNull()) {
+                throw new NumberFormatException();
+            }
+            double v = e.getAsDouble();
+            if (v != Math.rint(v) || Math.abs(v) > Integer.MAX_VALUE) {
+                throw new NumberFormatException();
+            }
+            return (int) v;
+        } catch (RuntimeException ex) {
+            throw ApiException.badRequest("missing_chunk", SuiteText.get(SuiteText.NEED_CHUNK));
+        }
     }
 
     /** Every normal faction in ranking order. */
     static List<Faction> all(DominionApi d) {
         return d.top(Integer.MAX_VALUE);
+    }
+
+    /**
+     * Every faction, safe and war zones included, through {@code factions()} from Dominion 0.7.0 on. An older
+     * Dominion gives the ranked list.
+     */
+    static List<Faction> every(DominionApi d) {
+        try {
+            return d.factions();
+        } catch (NoSuchMethodError | AbstractMethodError e) {
+            return all(d);
+        }
+    }
+
+    /** The ranked factions with the zones and any faction the ranking left out after them. */
+    static List<Faction> listed(DominionApi d, boolean zones) {
+        List<Faction> ranked = all(d);
+        List<Faction> out = new ArrayList<>(ranked);
+        if (zones) {
+            java.util.Set<UUID> seen = new java.util.HashSet<>();
+            ranked.forEach(f -> seen.add(f.id()));
+            for (Faction f : every(d)) {
+                if (seen.add(f.id())) {
+                    out.add(f);
+                }
+            }
+        }
+        return out;
     }
 
     private static Response summary(DominionApi d, List<String> worlds) {
@@ -127,8 +325,15 @@ public final class DominionRoutes implements SiblingUnit {
             members += f.memberCount();
             claims += d.claimCount(f.id());
         }
+        int zones = 0;
+        for (Faction f : every(d)) {
+            if (f.type() != null && f.type() != FactionType.NORMAL) {
+                zones++;
+            }
+        }
         JsonObject o = new JsonObject();
         o.addProperty("factions", all.size());
+        o.addProperty("zones", zones);
         o.addProperty("members", members);
         o.addProperty("claims", claims);
         TerritoryProvider tp = d.territoryProvider();
@@ -143,13 +348,19 @@ public final class DominionRoutes implements SiblingUnit {
     }
 
     private static Response factions(DominionApi d, Call call, Limits limits) {
-        List<Faction> all = all(d);
+        boolean zones = !"false".equalsIgnoreCase(call.query("zones", "true"));
+        List<Faction> all = listed(d, zones);
+        int ranked = all(d).size();
         int limit = limits.limit(call);
         int offset = limits.offset(call);
         JsonArray rows = new JsonArray();
         for (int i = offset; i < all.size() && i < offset + limit; i++) {
             JsonObject o = summary(d, all.get(i));
-            o.addProperty("rank", i + 1);
+            if (i < ranked) {
+                o.addProperty("rank", i + 1);
+            } else {
+                o.add("rank", null);
+            }
             rows.add(o);
         }
         return Response.ok(Json.page("factions", rows, all.size(), limit, offset));
@@ -231,7 +442,7 @@ public final class DominionRoutes implements SiblingUnit {
 
     private static Map<UUID, Faction> index(DominionApi d) {
         Map<UUID, Faction> out = new HashMap<>();
-        for (Faction f : all(d)) {
+        for (Faction f : every(d)) {
             out.put(f.id(), f);
         }
         return out;
@@ -287,7 +498,92 @@ public final class DominionRoutes implements SiblingUnit {
         return Response.ok(o);
     }
 
+    private static Response sieges(DominionApi d, Call call, List<String> loaded) {
+        List<SiegeInfo> running;
+        try {
+            running = d.sieges();
+        } catch (NoSuchMethodError | AbstractMethodError e) {
+            // Dominion before 0.7.0, the siege banners are all there is.
+            JsonObject o = pointsJson(d, call, loaded, "siege", true);
+            o.addProperty("sidesKnown", false);
+            return Response.ok(o);
+        }
+        List<String> worlds = worldsOf(call, loaded);
+        String only = call.query("world", null);
+        JsonArray a = new JsonArray();
+        for (SiegeInfo s : running) {
+            if (only != null && !only.isBlank() && !worlds.contains(s.world())) {
+                continue;
+            }
+            a.add(siege(s));
+        }
+        JsonObject o = new JsonObject();
+        o.addProperty("sidesKnown", true);
+        o.add("sieges", a);
+        return Response.ok(o);
+    }
+
+    private static Response siegeHistory(DominionApi d, Call call, Limits limits) {
+        String tag = call.query("faction", null);
+        UUID faction = tag == null || tag.isBlank() ? null : byTag(d, tag).id();
+        int limit = limits.limit(call);
+        List<SiegeInfo> done;
+        try {
+            done = d.siegeHistory(faction, limit);
+        } catch (NoSuchMethodError | AbstractMethodError e) {
+            throw new ApiException(501, "not_supported", SuiteText.get(SuiteText.NO_SIEGE_HISTORY));
+        }
+        JsonArray a = new JsonArray();
+        for (SiegeInfo s : done) {
+            if (a.size() >= limit) {
+                break;
+            }
+            a.add(siege(s));
+        }
+        JsonObject o = new JsonObject();
+        o.add("sieges", a);
+        return Response.ok(o);
+    }
+
+    static JsonObject siege(SiegeInfo s) {
+        JsonObject o = new JsonObject();
+        o.add("id", Json.str(s.id()));
+        o.add("attacker", side(s.attackerId(), s.attackerTag()));
+        o.add("defender", side(s.defenderId(), s.defenderTag()));
+        o.addProperty("faction", s.attackerTag());
+        o.addProperty("world", s.world());
+        JsonArray chunk = new JsonArray();
+        chunk.add(s.chunkX());
+        chunk.add(s.chunkZ());
+        o.add("chunk", chunk);
+        o.addProperty("x", s.x());
+        o.addProperty("y", s.y());
+        o.addProperty("z", s.z());
+        o.addProperty("phase", s.phase() == null ? null : s.phase().toLowerCase(Locale.ROOT));
+        o.addProperty("phaseEndsAt", s.phaseEndsAt());
+        o.addProperty("endsAt", s.phaseEndsAt());
+        o.addProperty("startedAt", s.startedAt());
+        o.add("startedBy", Json.str(s.startedBy()));
+        o.addProperty("active", s.active());
+        o.addProperty("blocksBroken", s.blocksBroken());
+        o.addProperty("containersOpened", s.containersOpened());
+        o.addProperty("attackerDeaths", s.attackerDeaths());
+        o.addProperty("defenderDeaths", s.defenderDeaths());
+        return o;
+    }
+
+    private static JsonObject side(UUID id, String tag) {
+        JsonObject o = new JsonObject();
+        o.add("id", Json.str(id));
+        o.addProperty("tag", tag);
+        return o;
+    }
+
     private static Response points(DominionApi d, Call call, List<String> loaded, String kind, boolean homes) {
+        return Response.ok(pointsJson(d, call, loaded, kind, homes));
+    }
+
+    private static JsonObject pointsJson(DominionApi d, Call call, List<String> loaded, String kind, boolean homes) {
         TerritoryProvider tp = d.territoryProvider();
         Map<UUID, Faction> byId = index(d);
         JsonArray a = new JsonArray();
@@ -320,11 +616,11 @@ public final class DominionRoutes implements SiblingUnit {
         }
         JsonObject o = new JsonObject();
         o.add("siege".equals(kind) ? "sieges" : "points", a);
-        return Response.ok(o);
+        return o;
     }
 
     private static Response relations(DominionApi d) {
-        List<Faction> all = all(d);
+        List<Faction> all = every(d);
         Map<UUID, Faction> byId = new LinkedHashMap<>();
         all.forEach(f -> byId.put(f.id(), f));
         JsonArray a = new JsonArray();
@@ -358,7 +654,7 @@ public final class DominionRoutes implements SiblingUnit {
 
     static Names names(DominionApi d) {
         return new Names(MOD, Names::online, name -> {
-            for (Faction f : all(d)) {
+            for (Faction f : every(d)) {
                 for (Member m : f.members()) {
                     if (m.name() != null && m.name().equalsIgnoreCase(name)) {
                         return Optional.of(m.uuid());

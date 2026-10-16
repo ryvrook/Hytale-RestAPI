@@ -55,6 +55,14 @@ public final class SuiteText {
 
     public static final String FACTION_NOT_FOUND = Messages.define("suite.dominion.factionNotFound", "Dominion has no faction with the tag {tag}.");
     public static final String NEED_COORDS = Messages.define("suite.dominion.needCoords", "Give world, x and z as block coordinates.");
+    public static final String NO_STAFF = Messages.define("suite.dominion.noStaff",
+            "This Dominion has no staff actions in its API, they came with Dominion 0.7.0.");
+    public static final String NO_SIEGE_HISTORY = Messages.define("suite.dominion.noSiegeHistory",
+            "This Dominion keeps no siege history in its API, it came with Dominion 0.7.0.");
+    public static final String NEED_PLAYER = Messages.define("suite.dominion.needPlayer", "Name the player, by name or UUID.");
+    public static final String NEED_POWER = Messages.define("suite.dominion.needPower", "power must be a number, such as 10 or 12.5.");
+    public static final String NEED_CHUNK = Messages.define("suite.dominion.needChunk",
+            "Give world, chunkX and chunkZ, whole chunk coordinates (a block x of 100 is chunk 3).");
     public static final String UNKNOWN_WORLD = Messages.define("suite.unknownWorld", "There is no world named {world}.");
 
     public static final String FEAT_NOT_FOUND = Messages.define("suite.feats.featNotFound", "Feats has no feat {feat}.");
