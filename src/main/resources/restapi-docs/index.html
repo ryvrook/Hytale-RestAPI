@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-try-it="true">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>RestAPI docs</title>
+<link rel="stylesheet" href="docs/docs.css">
+<script src="docs/docs.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1 id="title">RestAPI</h1>
+    <p id="meta" class="muted">Loading openapi.json</p>
+    <p id="about" class="about"></p>
+  </div>
+</header>
+<main class="wrap">
+  <section class="bar">
+    <label class="field">
+      <span>Key</span>
+      <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="rapi_...">
+    </label>
+    <label class="field grow">
+      <span>Filter</span>
+      <input id="filter" type="search" autocomplete="off" spellcheck="false" placeholder="path, scope or group">
+    </label>
+    <button id="reload" type="button">Load again</button>
+  </section>
+  <p class="muted small" id="keynote">The key stays in this tab's memory. Nothing is saved, and closing the tab forgets it.</p>
+  <p id="error" class="error" hidden></p>
+  <nav id="toc" class="toc"></nav>
+  <div id="groups"></div>
+  <noscript><p>This page needs JavaScript. The raw document is at <a href="openapi.json">openapi.json</a>.</p></noscript>
+</main>
+<footer class="wrap muted small">
+  <p>Served by RestAPI from this server. The raw document is at <a href="openapi.json">openapi.json</a>.</p>
+</footer>
+</body>
+</html>
