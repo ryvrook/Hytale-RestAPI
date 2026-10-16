@@ -21,8 +21,9 @@ import java.util.function.Supplier;
  *
  * <p>A sibling that was bound and then reloaded brings new classes that the unit already linked against the old
  * ones cannot use. Every suite mod from {@link Sibling#hooksSince()} on reloads its dependents, RestAPI among them,
- * so the group comes back by itself and the unbind in between is logged at the quiet level only. For an older copy
- * bound under always the reason names the reload that brings it back.
+ * so the group comes back by itself and the unbind in between is logged at the quiet level only. For a sibling
+ * without that pass, SocialBridge 0.2.0 or an older copy bound under always, RestAPI reloads itself through
+ * {@link #onStaleLink}.
  */
 public final class Siblings {
     private static final class Slot {
@@ -42,6 +43,8 @@ public final class Siblings {
     private final Consumer<String> quiet;
     private final Map<Sibling, Slot> slots = new EnumMap<>(Sibling.class);
     private final List<Consumer<Presence>> listeners = new CopyOnWriteArrayList<>();
+    private volatile Consumer<Sibling> relink;
+    private boolean relinkAsked;
 
     public Siblings(PluginProbe probe, Router router, Function<Sibling, SiblingUnit> loader,
                     Function<Sibling, Mode> modes, Supplier<RestApi> api, Consumer<String> log) {
@@ -84,6 +87,14 @@ public final class Siblings {
 
     public void listen(Consumer<Presence> listener) {
         listeners.add(listener);
+    }
+
+    /**
+     * What reloads RestAPI when a bound sibling was reloaded and that version has no dependents pass, such as
+     * SocialBridge 0.2.0. Asked once per RestAPI instance, the next instance binds the new classes on its own.
+     */
+    public void onStaleLink(Consumer<Sibling> relink) {
+        this.relink = relink;
     }
 
     /** Checks every sibling and binds or unbinds where the answer changed. */
@@ -138,11 +149,21 @@ public final class Siblings {
                 why = "version " + found.version() + " is older than " + s.minimum();
             }
         }
-        boolean comesBack = found != null && s.reloadsDependents(found.version());
+        boolean passes = found != null && s.reloadsDependents(found.version());
+        Consumer<Sibling> self = relink;
+        boolean comesBack = passes || found != null && self != null;
         if (why == null && reloaded) {
-            why = comesBack
-                    ? s.pluginName() + " was reloaded and reloads RestAPI in a moment, which binds it again"
-                    : s.pluginName() + " was reloaded while RestAPI ran. Run /plugin reload Ryvrook:RestAPI to bind it again";
+            if (passes) {
+                why = s.pluginName() + " was reloaded and reloads RestAPI in a moment, which binds it again";
+            } else if (self != null) {
+                why = s.pluginName() + " was reloaded, RestAPI reloads itself in a moment to bind it again";
+                if (!relinkAsked) {
+                    relinkAsked = true;
+                    self.accept(s);
+                }
+            } else {
+                why = s.pluginName() + " was reloaded while RestAPI ran. Run /plugin reload Ryvrook:RestAPI to bind it again";
+            }
         }
         // A sibling that is stopping or was reloaded and reloads its dependents brings RestAPI back on its own.
         boolean passing = comesBack && slot.linkedTo != null && (reloaded || !found.running());

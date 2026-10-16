@@ -19,7 +19,8 @@
     "Ryvrook:Feats": ">=1.7.0",
     "Ryvrook:ChronicleStats": ">=1.5.0",
     "Ryvrook:Atlas": ">=1.8.0",
-    "Ryvrook:Lullaby": ">=1.1.0"
+    "Ryvrook:Lullaby": ">=1.1.0",
+    "Ryvrook:SocialBridge": ">=0.2.0"
   },
   "LoadBefore": {},
   "DisabledByDefault": false,

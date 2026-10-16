@@ -153,12 +153,49 @@ class SiblingsTest {
     }
 
     @Test
+    void aReloadOfASiblingWithoutAPassReloadsRestApiOnceAndStaysQuiet() {
+        List<String> quiet = new ArrayList<>();
+        List<Sibling> relinks = new ArrayList<>();
+        installed.put(Sibling.SOCIALBRIDGE, running("0.2.0"));
+        Siblings s = new Siblings(installed::get, router, Unit::new, x -> Mode.AUTO, () -> null, log::add, quiet::add);
+        s.onStaleLink(relinks::add);
+        s.check();
+        assertEquals(1, log.size());
+        installed.put(Sibling.SOCIALBRIDGE, new PluginProbe.Found(new Object(), "0.2.0", "SHUTDOWN"));
+        s.check();
+        installed.put(Sibling.SOCIALBRIDGE, running("0.2.0"));
+        s.check();
+        s.check();
+        assertEquals(List.of(Sibling.SOCIALBRIDGE), relinks, "asked once");
+        assertTrue(s.presence(Sibling.SOCIALBRIDGE).reason().contains("reloads itself"), s.presence(Sibling.SOCIALBRIDGE).reason());
+        assertEquals(1, log.size(), "the way back logs nothing at info");
+        assertEquals(List.of("bind socialbridge", "unbind socialbridge"), calls);
+    }
+
+    @Test
+    void selfReloadSkipsWhenAPassAlreadyReloadedRestApi() throws Exception {
+        Object self = new Object();
+        java.util.concurrent.locks.ReentrantLock lock = new java.util.concurrent.locks.ReentrantLock();
+        int[] reloads = {0};
+        assertEquals(SelfReload.Outcome.SKIPPED,
+                SelfReload.run(Object::new, self, () -> ++reloads[0] > 0, lock));
+        assertEquals(SelfReload.Outcome.RELOADED,
+                SelfReload.run(() -> self, self, () -> ++reloads[0] > 0, lock));
+        assertEquals(1, reloads[0]);
+        assertFalse(lock.isLocked());
+    }
+
+    @Test
     void hooksStartAtTheVersionInTheTable() {
         assertTrue(Sibling.FEATS.reloadsDependents("1.7.0"));
         assertTrue(Sibling.FEATS.reloadsDependents("1.10.0"));
         assertFalse(Sibling.FEATS.reloadsDependents("1.6.0"));
         assertFalse(Sibling.FEATS.reloadsDependents(null));
+        assertFalse(Sibling.SOCIALBRIDGE.reloadsDependents("0.2.0"), "SocialBridge has no dependents pass yet");
         for (Sibling x : Sibling.values()) {
+            if (x.hooksSince() == null) {
+                continue;
+            }
             assertFalse(dev.ryvrook.restapi.util.Versions.below(x.minimum(), x.hooksSince()),
                     x + " binds at its minimum through hooks");
         }

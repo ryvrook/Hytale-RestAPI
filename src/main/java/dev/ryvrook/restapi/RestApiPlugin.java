@@ -1,6 +1,8 @@
 package dev.ryvrook.restapi;
 
+import com.hypixel.hytale.common.plugin.PluginIdentifier;
 import com.hypixel.hytale.server.core.Message;
+import com.hypixel.hytale.server.core.plugin.PluginManager;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import dev.ryvrook.restapi.audit.AuditEntry;
@@ -12,6 +14,7 @@ import dev.ryvrook.restapi.command.Replies;
 import dev.ryvrook.restapi.command.RestApiCommand;
 import dev.ryvrook.restapi.config.CoreSettings;
 import dev.ryvrook.restapi.config.Settings;
+import dev.ryvrook.restapi.control.SuiteLock;
 import dev.ryvrook.restapi.http.Gate;
 import dev.ryvrook.restapi.http.HttpHost;
 import dev.ryvrook.restapi.http.RateLimiter;
@@ -20,6 +23,7 @@ import dev.ryvrook.restapi.server.WorldSampler;
 import dev.ryvrook.restapi.siblings.EngineProbe;
 import dev.ryvrook.restapi.siblings.Mode;
 import dev.ryvrook.restapi.siblings.Presence;
+import dev.ryvrook.restapi.siblings.SelfReload;
 import dev.ryvrook.restapi.siblings.Sibling;
 import dev.ryvrook.restapi.siblings.SiblingSettings;
 import dev.ryvrook.restapi.siblings.Siblings;
@@ -134,6 +138,7 @@ public final class RestApiPlugin extends JavaPlugin {
                 SiblingSettings::mode, () -> api, msg -> getLogger().at(Level.INFO).log("%s", msg),
                 msg -> getLogger().at(Level.FINE).log("%s", msg));
         api.siblings(siblings);
+        siblings.onStaleLink(this::reloadSelf);
 
         getCommandRegistry().registerCommand(new RestApiCommand(this));
     }
@@ -178,6 +183,18 @@ public final class RestApiPlugin extends JavaPlugin {
                 audit.close();
             }
         }
+    }
+
+    /** Reloads RestAPI after a sibling without a dependents pass was reloaded, see {@link SelfReload}. */
+    private void reloadSelf(Sibling sibling) {
+        PluginManager manager = PluginManager.get();
+        PluginIdentifier id = getIdentifier();
+        if (manager == null || id == null) {
+            return;
+        }
+        String line = "RestAPI could not reload itself after " + sibling.pluginName() + " was reloaded, run /plugin reload " + id;
+        SelfReload.schedule(() -> manager.getPlugin(id), this, () -> manager.reload(id), SuiteLock.shared(),
+                () -> getLogger().at(Level.WARNING).log("%s", line));
     }
 
     private ScheduledThreadPoolExecutor newScheduler() {

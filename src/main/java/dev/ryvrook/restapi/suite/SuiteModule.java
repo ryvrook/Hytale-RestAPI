@@ -31,7 +31,8 @@ public final class SuiteModule implements RestModule {
             Sibling.FEATS, List.of(),
             Sibling.CHRONICLE, List.of(),
             Sibling.ATLAS, List.of(),
-            Sibling.LULLABY, List.of());
+            Sibling.LULLABY, List.of(),
+            Sibling.SOCIALBRIDGE, List.of("A dependents pass, until then RestAPI reloads itself after a reload of SocialBridge"));
 
     public SuiteModule() {
         SuiteSettings.touch();

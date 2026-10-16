@@ -28,7 +28,9 @@ public enum Scope {
     FEATS("feats", "Read Feats progress and unlocks."),
     CHRONICLE("chronicle", "Read Chronicle Stats player and server stats."),
     ATLAS("atlas", "Read the Atlas map link and status."),
-    LULLABY("lullaby", "Read Lullaby sleep state per world.");
+    LULLABY("lullaby", "Read Lullaby sleep state per world."),
+    SOCIALBRIDGE("socialbridge", "Read SocialBridge account links."),
+    SOCIALBRIDGE_WRITE("socialbridge.write", "Post to SocialBridge channels.");
 
     /** The word that stands for every scope in keys.json and in commands. */
     public static final String ALL = "all";

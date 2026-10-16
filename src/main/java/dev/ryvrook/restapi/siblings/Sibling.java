@@ -27,7 +27,10 @@ public enum Sibling {
     ATLAS("atlas", "Atlas", "1.8.0", "1.8.0", Scope.ATLAS, "dev.ryvrook.restapi.suite.atlas.AtlasRoutes",
             "The map link, render status, worlds and markers under /api/atlas"),
     LULLABY("lullaby", "Lullaby", "1.1.0", "1.1.0", Scope.LULLABY, "dev.ryvrook.restapi.suite.lullaby.LullabyRoutes",
-            "Sleepers, sleep progress and nights skipped per world under /api/lullaby");
+            "Sleepers, sleep progress and nights skipped per world under /api/lullaby"),
+    SOCIALBRIDGE("socialbridge", "SocialBridge", "0.2.0", null, Scope.SOCIALBRIDGE,
+            "dev.ryvrook.restapi.suite.socialbridge.SocialBridgeRoutes",
+            "Discord account links both ways and posts to its channels under /api/socialbridge", Scope.SOCIALBRIDGE_WRITE);
 
     public static final String GROUP = "Ryvrook";
 
@@ -76,7 +79,8 @@ public enum Sibling {
 
     /**
      * The first version with static onEnable and onDisable hooks and a dependents pass, which reloads RestAPI two
-     * seconds after the sibling itself was reloaded. From this version on the unit binds through the hooks.
+     * seconds after the sibling itself was reloaded. From this version on the unit binds through the hooks. Null for
+     * SocialBridge, which has the hooks but no dependents pass, so RestAPI reloads itself after it.
      */
     public String hooksSince() {
         return hooksSince;
@@ -84,7 +88,7 @@ public enum Sibling {
 
     /** True when this version of the sibling reloads RestAPI after its own reload. */
     public boolean reloadsDependents(String version) {
-        return version != null && !dev.ryvrook.restapi.util.Versions.below(version, hooksSince);
+        return hooksSince != null && version != null && !dev.ryvrook.restapi.util.Versions.below(version, hooksSince);
     }
 
     public Scope scope() {

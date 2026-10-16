@@ -63,6 +63,13 @@ public final class SuiteText {
     public static final String NEED_POWER = Messages.define("suite.dominion.needPower", "power must be a number, such as 10 or 12.5.");
     public static final String NEED_CHUNK = Messages.define("suite.dominion.needChunk",
             "Give world, chunkX and chunkZ, whole chunk coordinates (a block x of 100 is chunk 3).");
+    public static final String NOT_LINKED = Messages.define("suite.socialbridge.notLinked",
+            "{who} has no Discord account linked through SocialBridge.");
+    public static final String BAD_POST = Messages.define("suite.socialbridge.badPost", "A post needs text.");
+    public static final String BAD_COLOUR = Messages.define("suite.socialbridge.badColour",
+            "colour must be six hex digits such as #3BA55C, got {colour}.");
+    public static final String NOT_POSTED = Messages.define("suite.socialbridge.notPosted",
+            "SocialBridge did not take the post for {channel}. No service runs or the channel is turned off.");
     public static final String UNKNOWN_WORLD = Messages.define("suite.unknownWorld", "There is no world named {world}.");
 
     public static final String FEAT_NOT_FOUND = Messages.define("suite.feats.featNotFound", "Feats has no feat {feat}.");

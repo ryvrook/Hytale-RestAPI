@@ -20,7 +20,7 @@ require(hytaleChannel == "release" || hytaleChannel == "pre-release") {
 }
 
 // Sibling jars for the suite route groups, never shipped inside the mod. Each one is given with -PtrackerApiJar,
-// -PcoinageJar, -PdominionJar, -PfeatsJar, -PchronicleJar, -PatlasJar and -PlullabyJar, else the sibling checkout
+// -PcoinageJar, -PdominionJar, -PfeatsJar, -PchronicleJar, -PatlasJar, -PlullabyJar and -PsocialBridgeJar, else the sibling checkout
 // next to this one, else the checkout under ~/Projects. Only the unit classes under dev.ryvrook.restapi.suite.<id>
 // touch them, loaded by name after the presence check, so RestAPI still loads on a server without any of them.
 fun siblingJar(property: String, vararg candidates: String): String {
@@ -37,7 +37,8 @@ val featsJar = siblingJar("featsJar", "feats/build/libs/Feats-1.7.2.jar")
 val chronicleJar = siblingJar("chronicleJar", "chronicle-stats/build/libs/ChronicleStats-1.5.0.jar")
 val atlasJar = siblingJar("atlasJar", "atlas/build/libs/Atlas-1.9.0.jar")
 val lullabyJar = siblingJar("lullabyJar", "lullaby/build/libs/Lullaby-1.1.0.jar")
-val siblingJars = listOf(trackerApiJar, coinageJar, dominionJar, featsJar, chronicleJar, atlasJar, lullabyJar)
+val socialBridgeJar = siblingJar("socialBridgeJar", "socialbridge/build/libs/SocialBridge-0.2.0.jar")
+val siblingJars = listOf(trackerApiJar, coinageJar, dominionJar, featsJar, chronicleJar, atlasJar, lullabyJar, socialBridgeJar)
 
 repositories {
     mavenCentral()
