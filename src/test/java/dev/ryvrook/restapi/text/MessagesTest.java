@@ -45,7 +45,7 @@ class MessagesTest {
         Pattern colonReveal = Pattern.compile("^[A-Z][a-z ]+: ");
         for (String id : Messages.ids()) {
             String t = Messages.defaultOf(id);
-            assertFalse(t.contains("—"), id);
+            assertFalse(t.contains("\u2014"), id);
             assertFalse(t.contains(";"), id);
             assertFalse(t.contains("!"), id);
             assertFalse(colonReveal.matcher(t).find(), id + " starts with a label and a colon");
