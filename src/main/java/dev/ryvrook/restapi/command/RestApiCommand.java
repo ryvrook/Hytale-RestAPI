@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import static dev.ryvrook.restapi.text.CommandText.*;
 
 /**
- * {@code /restapi status|reload|keys list|keys create <name> <scopes>|keys revoke <name>|audit tail [--lines n]}.
+ * {@code /restapi status|reload|keys list|keys create <name> <scopes>|keys revoke <name>|audit tail [--lines n]|rcon status|webhooks list}.
  * Every node needs restapi.admin, the key nodes restapi.admin.keys as well, and all of them work from the console.
  * Anything that touches a file runs on RestAPI's scheduler and the reply comes back on the sender's world thread.
  */
@@ -29,6 +29,19 @@ public final class RestApiCommand extends AbstractCommandCollection {
         addSubCommand(new Leaf("reload", RELOAD, Perms.ADMIN, ctx -> plugin.reload(who(ctx))));
         addSubCommand(new Keys(plugin));
         addSubCommand(new Audit(plugin));
+        addSubCommand(new Group("rcon", RCON, new Leaf("status", RCON_STATUS, Perms.ADMIN,
+                ctx -> plugin.moduleLines("rcon", "status"))));
+        addSubCommand(new Group("webhooks", WEBHOOKS, new Leaf("list", WEBHOOKS_LIST, Perms.ADMIN,
+                ctx -> plugin.moduleLines("events", "webhooks"))));
+    }
+
+    /** A sub command group holding one leaf, such as rcon status. */
+    static final class Group extends AbstractCommandCollection {
+        Group(String name, String description, CommandBase leaf) {
+            super(name, Messages.get(description));
+            requirePermission(Perms.ADMIN);
+            addSubCommand(leaf);
+        }
     }
 
     /** Who ran a command, for the audit log and the createdBy of a key. */

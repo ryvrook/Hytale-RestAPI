@@ -31,4 +31,17 @@ public interface RestModule {
     /** Stops what start began. Called at shutdown and before a reload starts the module again. */
     default void stop() {
     }
+
+    /** Lines /restapi status prints for this module after the audit line. Most modules have none. */
+    default List<String> status() {
+        return List.of();
+    }
+
+    /**
+     * Lines for {@code /restapi <group> <topic>}, such as rcon status or events webhooks. Empty when the module has
+     * nothing under that topic.
+     */
+    default List<String> lines(String topic) {
+        return List.of();
+    }
 }

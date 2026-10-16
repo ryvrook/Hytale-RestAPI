@@ -79,6 +79,7 @@ public final class RconModule implements RestModule {
     }
 
     /** Lines for /restapi status. */
+    @Override
     public List<String> status() {
         List<String> out = new ArrayList<>();
         RconServer s = server;
@@ -94,5 +95,11 @@ public final class RconModule implements RestModule {
             out.add(Messages.get(RconText.STATUS_OFF));
         }
         return out;
+    }
+
+    /** /restapi rcon status prints the status lines. */
+    @Override
+    public List<String> lines(String topic) {
+        return "status".equals(topic) ? status() : List.of();
     }
 }

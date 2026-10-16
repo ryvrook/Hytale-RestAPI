@@ -14,6 +14,12 @@ public final class CommandText {
     public static final String KEYS_REVOKE = Messages.define("command.keys.revoke", "Revoke an API key.");
     public static final String AUDIT = Messages.define("command.audit", "Read the audit log.");
     public static final String AUDIT_TAIL = Messages.define("command.audit.tail", "Show the newest audit log lines.");
+    public static final String RCON = Messages.define("command.rcon", "RCON listener tools.");
+    public static final String RCON_STATUS = Messages.define("command.rcon.status", "Show the RCON listener and its connections.");
+    public static final String WEBHOOKS = Messages.define("command.webhooks", "Webhook tools.");
+    public static final String WEBHOOKS_LIST = Messages.define("command.webhooks.list", "List the webhooks with their delivery counts.");
+    public static final String MODULE_MISSING = Messages.define("command.moduleMissing",
+            "The {group} module is not in this build or did not start.");
     public static final String ARG_NAME = Messages.define("command.arg.name", "Key name, lower case letters, digits, dash or underscore");
     public static final String ARG_SCOPES = Messages.define("command.arg.scopes", "Scopes separated by spaces or commas, such as read players, or all");
     public static final String ARG_LINES = Messages.define("command.arg.lines", "How many lines, 1 to 50");

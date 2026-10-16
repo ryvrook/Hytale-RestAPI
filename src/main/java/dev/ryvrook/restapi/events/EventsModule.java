@@ -7,6 +7,7 @@ import dev.ryvrook.restapi.RestApiPlugin;
 import dev.ryvrook.restapi.RestModule;
 import dev.ryvrook.restapi.http.Gate;
 import dev.ryvrook.restapi.http.Route;
+import dev.ryvrook.restapi.text.Messages;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -148,6 +149,37 @@ public final class EventsModule implements RestModule {
         if (w != null) {
             w.stop(DRAIN_MILLIS);
         }
+    }
+
+    /** /restapi events webhooks lists the hooks with their delivery counts. The url shows its host only. */
+    @Override
+    public List<String> lines(String topic) {
+        if (!"webhooks".equals(topic)) {
+            return List.of();
+        }
+        Webhooks w = hooks;
+        if (w == null || !EventsSettings.ENABLED.get() || !EventsSettings.WEBHOOKS_ENABLED.get()) {
+            return List.of(Messages.get(EventsText.WEBHOOKS_OFF));
+        }
+        List<Webhooks.Hook> list = w.list();
+        if (list.isEmpty()) {
+            return List.of(Messages.get(EventsText.WEBHOOKS_NONE));
+        }
+        List<String> out = new ArrayList<>();
+        for (Webhooks.Hook h : list) {
+            Webhooks.State st = w.state(h.id());
+            String host;
+            try {
+                host = java.net.URI.create(h.url()).getHost();
+            } catch (IllegalArgumentException e) {
+                host = "?";
+            }
+            out.add(Messages.get(EventsText.WEBHOOKS_LINE, "id", h.id(), "host", host,
+                    "format", h.discord() ? "discord" : "json", "types", String.join(",", new java.util.TreeSet<>(h.types())),
+                    "delivered", st.delivered.get(), "failed", st.failed.get(), "queued", w.queued(h.id()),
+                    "last", st.lastStatus == 0 ? "none" : st.lastStatus));
+        }
+        return out;
     }
 
     /** The request counters /metrics reports, for the gate to feed. */

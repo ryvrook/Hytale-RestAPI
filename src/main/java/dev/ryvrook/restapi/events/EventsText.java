@@ -25,6 +25,13 @@ public final class EventsText {
     public static final String DISCORD_TEST = Messages.define("events.discord.test", "Test delivery from RestAPI for webhook {id}.");
     public static final String DISCORD_OTHER = Messages.define("events.discord.other", "{type} event.");
 
+    public static final String WEBHOOKS_NONE = Messages.define("events.webhooks.none",
+            "No webhooks in webhooks.json. Add one with POST /api/webhooks.");
+    public static final String WEBHOOKS_OFF = Messages.define("events.webhooks.off",
+            "Webhooks are off because webhooks.enabled or events.enabled is false.");
+    public static final String WEBHOOKS_LINE = Messages.define("events.webhooks.line",
+            "{id} to {host} ({format}) for {types}, {delivered} sent, {failed} failed, {queued} queued, last status {last}.");
+
     public static final String STREAM_OVERFLOW = Messages.define("events.stream.overflow",
             "The client read too slowly and the stream was closed. Reconnect with Last-Event-ID to resume.");
 

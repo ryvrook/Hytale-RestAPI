@@ -334,6 +334,15 @@ public final class RestApiPlugin extends JavaPlugin {
             out.add(info(Messages.get(KEYS_COUNT, "keys", count(keys.list().size(), "key"), "limit", CoreSettings.LIMITS_PER_MINUTE.get())));
             out.add(info(Messages.get(AUDIT_STATE, "state", CoreSettings.AUDIT_ENABLED.get() ? "on" : "off",
                     "days", CoreSettings.AUDIT_KEEP_DAYS.get())));
+            for (RestModule m : modules) {
+                try {
+                    for (String line : m.status()) {
+                        out.add(info(line));
+                    }
+                } catch (RuntimeException | LinkageError e) {
+                    getLogger().at(Level.WARNING).withCause(e).log("RestAPI could not read the %s status", m.group());
+                }
+            }
             out.add(info(Messages.get(SIBLINGS_HEAD, "seconds", SiblingSettings.CHECK_SECONDS.get())));
             for (Presence p : siblings.table()) {
                 Sibling s = p.sibling();
@@ -341,6 +350,24 @@ public final class RestApiPlugin extends JavaPlugin {
                         ? Replies.line(Messages.get(SIBLING_BOUND, "plugin", s.pluginName(), "version", p.version(),
                         "routes", count(p.routes(), "route"), "id", s.id(), "scope", s.scope().id()), Replies.OK)
                         : info(Messages.get(SIBLING_UNBOUND, "plugin", s.pluginName(), "reason", p.reason())));
+            }
+            return out;
+        });
+    }
+
+    /** Lines for /restapi rcon status, /restapi events webhooks and the like, from the module of that group. */
+    public CompletableFuture<List<Message>> moduleLines(String group, String topic) {
+        return async(() -> {
+            List<Message> out = new ArrayList<>();
+            for (RestModule m : modules) {
+                if (m.group().equals(group)) {
+                    for (String line : m.lines(topic)) {
+                        out.add(info(line));
+                    }
+                }
+            }
+            if (out.isEmpty()) {
+                out.add(Replies.line(Messages.get(MODULE_MISSING, "group", group), Replies.ERROR));
             }
             return out;
         });
