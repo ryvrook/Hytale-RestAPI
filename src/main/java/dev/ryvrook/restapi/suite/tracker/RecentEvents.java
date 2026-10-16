@@ -64,6 +64,32 @@ public final class RecentEvents {
         }
     }
 
+    /**
+     * The listener RestAPI subscribes with. A LinkageError, which is what an event from a TrackerAPI whose class
+     * loader went away throws, runs drop once and is swallowed, so TrackerAPI's dispatch thread never waits on
+     * RestAPI. Every later event is ignored.
+     */
+    public static java.util.function.Consumer<TrackerEvent> guarded(java.util.function.Consumer<TrackerEvent> add,
+                                                                    Runnable drop) {
+        java.util.concurrent.atomic.AtomicBoolean dropped = new java.util.concurrent.atomic.AtomicBoolean();
+        return e -> {
+            if (dropped.get()) {
+                return;
+            }
+            try {
+                add.accept(e);
+            } catch (LinkageError x) {
+                if (dropped.compareAndSet(false, true)) {
+                    try {
+                        drop.run();
+                    } catch (RuntimeException | LinkageError ignored) {
+                        // The subscription goes with the old TrackerAPI anyway.
+                    }
+                }
+            }
+        };
+    }
+
     public void clear() {
         synchronized (byKind) {
             byKind.clear();

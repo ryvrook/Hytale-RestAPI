@@ -312,4 +312,18 @@ class TrackerRoutesTest {
         }
         return null;
     }
+
+    @Test
+    void aLinkageErrorDropsTheSubscriptionOnceAndNeverThrows() {
+        int[] adds = {0};
+        int[] drops = {0};
+        java.util.function.Consumer<dev.ryvrook.trackerapi.api.TrackerEvent> l = RecentEvents.guarded(e -> {
+            adds[0]++;
+            throw new NoClassDefFoundError("dev/ryvrook/trackerapi/api/event/PlayerJoined");
+        }, () -> drops[0]++);
+        assertDoesNotThrow(() -> l.accept(null));
+        assertDoesNotThrow(() -> l.accept(null));
+        assertEquals(1, adds[0], "events after the drop are ignored");
+        assertEquals(1, drops[0]);
+    }
 }

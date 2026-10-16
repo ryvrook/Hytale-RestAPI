@@ -105,7 +105,7 @@ public final class TrackerRoutes implements SiblingUnit {
             }
         }
         RecentEvents ring = recent;
-        subscription = t.subscribeKinds(OWNER, kinds, Delivery.ASYNC, ring::add);
+        subscription = t.subscribeKinds(OWNER, kinds, Delivery.ASYNC, RecentEvents.guarded(ring::add, this::closeSubscription));
     }
 
     private void closeSubscription() {
