@@ -80,6 +80,8 @@ public final class SuiteText {
     public static final String BAD_RESOLUTION = Messages.define("suite.chronicle.badResolution", "resolution must be minute, hour or day.");
 
     public static final String UNKNOWN_LAYER = Messages.define("suite.atlas.unknownLayer", "Atlas has no layer {layer}.");
+    public static final String ATLAS_OLD = Messages.define("suite.atlas.old",
+            "This Atlas has no render status or world list in its API, they came with Atlas 1.8.0.");
 
     /** The sentence with its placeholders filled. */
     public static String get(String id, Object... pairs) {

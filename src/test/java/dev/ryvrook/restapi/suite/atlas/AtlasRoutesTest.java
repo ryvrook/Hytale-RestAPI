@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AtlasRoutesTest {
     /** AtlasApi with layers made the way Atlas makes them. */
-    static final class FakeAtlas extends AtlasApi {
+    static class FakeAtlas extends AtlasApi {
         final List<MarkerLayer> layers = new ArrayList<>();
         String publicUrl = "http://your-server-address:8123/";
         boolean publicUrlSet;
@@ -131,7 +131,7 @@ class AtlasRoutesTest {
     void theSummaryReadsTheAddressButNeverTheToken() throws Exception {
         Files.writeString(config, "{\"bind\": \"127.0.0.1\", \"port\": 8190, \"basePath\": \"/map\", \"publicUrl\": \"\", \"adminToken\": \"secret\"}");
         JsonObject o = Calls.json(calls.get("/api/atlas"));
-        assertEquals("http://127.0.0.1:8190/map/", o.get("url").getAsString());
+        assertEquals("http://your-server-address:8123/", o.get("url").getAsString(), "the address comes from Atlas");
         assertFalse(o.get("publicUrlSet").getAsBoolean());
         assertEquals(2, o.get("layers").getAsInt());
         assertEquals(3, o.get("markers").getAsInt());
@@ -147,7 +147,26 @@ class AtlasRoutesTest {
         JsonObject o = Calls.json(calls.get("/api/atlas"));
         assertFalse(o.get("configRead").getAsBoolean());
         assertEquals(8123, o.get("port").getAsInt());
-        assertEquals("http://127.0.0.1:8123/", o.get("url").getAsString());
+        atlas.publicUrl = "https://map.example.com/";
+        atlas.publicUrlSet = true;
+        o = Calls.json(calls.get("/api/atlas"));
+        assertEquals("https://map.example.com/", o.get("url").getAsString());
+        assertTrue(o.get("publicUrlSet").getAsBoolean());
+    }
+
+    @Test
+    void renderStatusAndWorlds() {
+        atlas.render = new RenderStatus(120, 2, 40311, true, Map.of("default", 120), -1, 0);
+        atlas.worlds = List.of(new WorldStatus("default", true, 3, 5120, 12, true), new WorldStatus("arena", false, 0, 40, 0, false));
+        JsonObject r = Calls.json(calls.get("/api/atlas/render"));
+        assertEquals(120, r.get("queued").getAsInt());
+        assertTrue(r.get("paused").getAsBoolean());
+        assertEquals(-1, r.get("budgetLeft").getAsInt());
+        assertEquals(120, r.getAsJsonObject("queuedPerWorld").get("default").getAsInt());
+        JsonArray w = Calls.json(calls.get("/api/atlas/worlds")).getAsJsonArray("worlds");
+        assertEquals(2, w.size());
+        assertEquals(5120, w.get(0).getAsJsonObject().get("exploredChunks").getAsInt());
+        assertFalse(w.get(1).getAsJsonObject().get("publicVisible").getAsBoolean());
     }
 
     @Test
@@ -181,5 +200,25 @@ class AtlasRoutesTest {
         assertEquals("http://127.0.0.1:8123", AtlasProbe.base("0.0.0.0", 8123, ""));
         assertEquals("http://10.0.0.2:80/map", AtlasProbe.base("10.0.0.2", 80, "map/"));
         assertEquals("http://[::1]:8123", AtlasProbe.base("::1", 8123, null));
+    }
+
+    @Test
+    void anOlderAtlasGivesTheAddressFromItsConfig() throws Exception {
+        FakeAtlas old = new FakeAtlas() {
+            @Override
+            public String publicUrl() {
+                throw new AbstractMethodError("publicUrl");
+            }
+
+            @Override
+            public RenderStatus renderStatus() {
+                throw new AbstractMethodError("renderStatus");
+            }
+        };
+        Files.writeString(config, "{\"bind\": \"127.0.0.1\", \"port\": 8190, \"basePath\": \"/map\", \"publicUrl\": \"\"}");
+        Calls calls = new Calls(AtlasRoutes.routes(() -> old, new JsonFile(config, "Atlas"), Set::of, () -> false, null,
+                () -> Limits.DEFAULTS));
+        assertEquals("http://127.0.0.1:8190/map/", Calls.json(calls.get("/api/atlas")).get("url").getAsString());
+        assertEquals(501, calls.get("/api/atlas/render").status());
     }
 }

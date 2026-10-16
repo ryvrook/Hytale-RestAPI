@@ -10,8 +10,10 @@ import dev.ryvrook.atlas.api.MarkerLayer;
 import dev.ryvrook.atlas.api.PointMarker;
 import dev.ryvrook.atlas.api.PolygonMarker;
 import dev.ryvrook.atlas.api.PolylineMarker;
+import dev.ryvrook.atlas.api.RenderStatus;
 import dev.ryvrook.atlas.api.SessionApi;
 import dev.ryvrook.atlas.api.ShapeMarker;
+import dev.ryvrook.atlas.api.WorldStatus;
 import dev.ryvrook.restapi.RestApi;
 import dev.ryvrook.restapi.auth.Scope;
 import dev.ryvrook.restapi.http.Access;
@@ -38,9 +40,11 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * The Atlas route group under /api/atlas. Marker layers come from AtlasApi, bound through its onEnable and
- * onDisable hooks. The map address comes from {@code atlas.json}, of which only bind, port, basePath and publicUrl
- * are read, never the admin token. The players hidden from the map come from SessionApi when Atlas has one.
+ * The Atlas route group under /api/atlas, bound through AtlasApi's onEnable and onDisable hooks. Marker layers,
+ * the map address players open, the render queue and the worlds come from AtlasApi. The web server's bind, port and
+ * basePath for the health probe come from {@code atlas.json}, of which nothing else is read, never the admin token.
+ * An older Atlas bound under always gives the address from atlas.json too and has no render or worlds route. The
+ * players hidden from the map come from SessionApi when Atlas has one.
  */
 public final class AtlasRoutes implements SiblingUnit {
     static final String GROUP = Sibling.ATLAS.group();
@@ -97,8 +101,18 @@ public final class AtlasRoutes implements SiblingUnit {
         out.add(Route.of(GROUP, "GET", "/api/atlas", SCOPE, Access.READ,
                 "The map address players open, the web server bind and port, the marker layers and, with suite.atlas.probe, the map's own health answer.",
                 call -> summary(api.get(), config, probe.getAsBoolean() ? prober : null)).doc(new RouteDoc(List.of(), null,
-                "{\"url\":\"https://map.example.com/\",\"bind\":\"127.0.0.1\",\"port\":8123,\"layers\":4,\"markers\":37,\"health\":{\"reachable\":true,\"httpStatus\":200,\"ok\":true,\"version\":\"1.7.0\"}}",
+                "{\"url\":\"https://map.example.com/\",\"publicUrlSet\":true,\"bind\":\"127.0.0.1\",\"port\":8123,\"layers\":4,\"markers\":37,\"health\":{\"reachable\":true,\"httpStatus\":200,\"ok\":true,\"version\":\"1.8.0\"}}",
                 List.of("sibling_gone"))));
+        out.add(Route.of(GROUP, "GET", "/api/atlas/render", SCOPE, Access.READ,
+                "The tile render queue, tiles running and done, whether rendering is paused and the budget left this minute.",
+                call -> render(api.get())).doc(new RouteDoc(List.of(), null,
+                "{\"queued\":120,\"running\":2,\"done\":40311,\"paused\":false,\"queuedPerWorld\":{\"default\":120},\"budgetLeft\":-1,\"budgetPerMinute\":0}",
+                List.of("not_supported"))));
+        out.add(Route.of(GROUP, "GET", "/api/atlas/worlds", SCOPE, Access.READ,
+                "The worlds Atlas renders, loaded or touched since start, with players, explored chunks, queued tiles and whether the public map shows them.",
+                call -> worlds(api.get())).doc(new RouteDoc(List.of(), null,
+                "{\"worlds\":[{\"name\":\"default\",\"loaded\":true,\"players\":3,\"exploredChunks\":5120,\"queuedTiles\":12,\"publicVisible\":true}]}",
+                List.of("not_supported"))));
         out.add(Route.of(GROUP, "GET", "/api/atlas/layers", SCOPE, Access.READ,
                 "Every marker layer other plugins put on the map, with its tier, size and worlds.",
                 call -> layers(api.get())));
@@ -126,10 +140,20 @@ public final class AtlasRoutes implements SiblingUnit {
         int port = number(cfg, "port", 8123);
         String basePath = text(cfg, "basePath", "");
         String publicUrl = text(cfg, "publicUrl", "");
+        String url;
+        boolean urlSet;
+        try {
+            url = a.publicUrl();
+            urlSet = a.publicUrlSet();
+        } catch (AbstractMethodError | NoSuchMethodError e) {
+            // Atlas before 1.8.0.
+            url = publicUrl.isBlank() ? AtlasProbe.base(bind, port, basePath) + "/" : publicUrl;
+            urlSet = !publicUrl.isBlank();
+        }
         JsonObject o = new JsonObject();
         o.addProperty("configRead", cfg != null);
-        o.addProperty("url", publicUrl.isBlank() ? AtlasProbe.base(bind, port, basePath) + "/" : publicUrl);
-        o.addProperty("publicUrlSet", !publicUrl.isBlank());
+        o.addProperty("url", url);
+        o.addProperty("publicUrlSet", urlSet);
         o.addProperty("bind", bind);
         o.addProperty("port", port);
         o.addProperty("basePath", basePath);
@@ -256,6 +280,47 @@ public final class AtlasRoutes implements SiblingUnit {
             }
         }
         return a;
+    }
+
+    private static Response render(AtlasApi a) {
+        RenderStatus r;
+        try {
+            r = a.renderStatus();
+        } catch (AbstractMethodError | NoSuchMethodError | NoClassDefFoundError e) {
+            throw new ApiException(501, "not_supported", SuiteText.get(SuiteText.ATLAS_OLD));
+        }
+        JsonObject o = new JsonObject();
+        o.addProperty("queued", r.queued());
+        o.addProperty("running", r.running());
+        o.addProperty("done", r.done());
+        o.addProperty("paused", r.paused());
+        o.add("queuedPerWorld", Json.numbers(new java.util.TreeMap<>(r.queuedPerWorld())));
+        o.addProperty("budgetLeft", r.budgetLeft());
+        o.addProperty("budgetPerMinute", r.budgetPerMinute());
+        return Response.ok(o);
+    }
+
+    private static Response worlds(AtlasApi a) {
+        List<WorldStatus> worlds;
+        try {
+            worlds = a.worlds();
+        } catch (AbstractMethodError | NoSuchMethodError | NoClassDefFoundError e) {
+            throw new ApiException(501, "not_supported", SuiteText.get(SuiteText.ATLAS_OLD));
+        }
+        JsonArray arr = new JsonArray();
+        for (WorldStatus w : worlds) {
+            JsonObject o = new JsonObject();
+            o.addProperty("name", w.name());
+            o.addProperty("loaded", w.loaded());
+            o.addProperty("players", w.players());
+            o.addProperty("exploredChunks", w.exploredChunks());
+            o.addProperty("queuedTiles", w.queuedTiles());
+            o.addProperty("publicVisible", w.publicVisible());
+            arr.add(o);
+        }
+        JsonObject o = new JsonObject();
+        o.add("worlds", arr);
+        return Response.ok(o);
     }
 
     private static Response hiddenList(AtlasApi a, Set<UUID> hidden) {

@@ -30,7 +30,7 @@ public final class SuiteModule implements RestModule {
             Sibling.DOMINION, List.of(),
             Sibling.FEATS, List.of(),
             Sibling.CHRONICLE, List.of(),
-            Sibling.ATLAS, List.of("Render status and the worlds rendered"),
+            Sibling.ATLAS, List.of(),
             Sibling.LULLABY, List.of("A read API with the sleepers per world, today the files are read"));
 
     public SuiteModule() {
