@@ -10,7 +10,7 @@ public final class RconText {
     public static final String NO_CONSOLE = Messages.define("rcon.noConsole",
             "No command ran. The console module is not running, check commands.enabled in RestAPI.json.");
     public static final String DENIED = Messages.define("rcon.denied",
-            "{command} is on the deny list and did not run.");
+            "{command} is on the deny list and was not run.");
     public static final String FAILED = Messages.define("rcon.failed",
             "{command} failed. The server log has the cause.");
     public static final String TIMED_OUT = Messages.define("rcon.timedOut",

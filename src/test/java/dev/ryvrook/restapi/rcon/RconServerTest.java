@@ -167,8 +167,8 @@ class RconServerTest {
     void stopIsDeniedAndTheConnectionStaysUp() throws Exception {
         try (RconClient c = client()) {
             c.login(token);
-            assertEquals("stop is on the deny list and did not run.", c.command(40, "stop"));
-            assertEquals("stop now is on the deny list and did not run.", c.command(44, "/stop now"));
+            assertEquals("stop is on the deny list and was not run.", c.command(40, "stop"));
+            assertEquals("stop now is on the deny list and was not run.", c.command(44, "/stop now"));
             assertEquals("[Server] still here", c.command(42, "say still here"));
         }
     }

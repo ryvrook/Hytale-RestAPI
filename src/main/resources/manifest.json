@@ -9,7 +9,7 @@
       "Name": "ryvrook"
     }
   ],
-  "Website": "https://github.com/ryvrook/restapi",
+  "Website": "https://github.com/ryvrook/Hytale-RestAPI",
   "ServerVersion": ">=0.7.0",
   "Dependencies": {},
   "OptionalDependencies": {
