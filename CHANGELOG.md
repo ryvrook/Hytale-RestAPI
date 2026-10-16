@@ -28,6 +28,25 @@ semantic versioning.
   moves through `coinage.write` name the key in the ledger and take `Idempotency-Key` replays. `GET /api/suite`
   shows what is mounted.
 - `/restapi rcon status` and `/restapi webhooks list`, and `/restapi status` prints the RCON line.
+- Dominion staff routes under `dominion.write`: disband, leader, power, unclaim and unclaim all, acting as
+  `RestAPI:<key name>`, each with an audit line. `suite.dominion.writes` turns them off.
+- `GET /api/dominion/sieges/history`, `/api/chronicle/boards`, `/api/chronicle/series` and `series/{id}`,
+  `/api/atlas/render` and `/api/atlas/worlds`. 131 routes with all seven suite mods.
+- `?initiator=<name>` on `GET /api/coinage/ledger`, and `suite.chronicle.performanceSeries`.
+
+### Changed
+
+- Every suite group binds through its mod's `onEnable` and `onDisable` hooks and needs TrackerAPI 1.1.0, Coinage
+  1.3.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0 and Lullaby 1.1.0. A reload of any of
+  them brings RestAPI back through that mod's dependents pass, and the unbind on the way logs at FINE only.
+  Under `always` an older copy binds with what its API had.
+- Coinage moves name the API key as the initiator, so `/coinage find` and the daily reports show the key.
+- `/api/dominion/factions` holds the safe and war zones after the ranked factions, and `/api/dominion/sieges`
+  gives both sides, the phase and the counts.
+- `/api/feats/top` reads `FeatsApi.top`, Chronicle boards come per window and world with server totals and
+  records live, and `/api/atlas` takes its address from Atlas.
+- `/api/lullaby` reads Lullaby's API and gives who is in bed, who is ready and how many are needed. The copy of
+  Lullaby's sleep rule is gone.
 
 ## 0.1.0 - 2026-10-16
 

@@ -124,15 +124,19 @@ that every route sits under `/api/<id>`, names the group `suite.<id>` and needs 
 group. Anything else unmounts it.
 
 The plugin object is kept at bind. A different object later means the mod was reloaded. The unit's classes were
-linked against the old copy, so the group stays down with a reason that names `/plugin reload Ryvrook:RestAPI`.
-TrackerAPI 1.1.0 and Coinage 1.2.0 reload every plugin that lists them, RestAPI lists all seven under
-`OptionalDependencies`, so for those two RestAPI comes back on its own under the suite reload rule in
-TrackerAPI's `docs/DEVELOPMENT.md`. Listing them also makes the engine load the seven before RestAPI and stop
-RestAPI first, seen in the smoke run.
+linked against the old copy, so the group stays down until RestAPI itself is reloaded. Every suite mod from the
+version in `Sibling.hooksSince` on (TrackerAPI 1.1.0, Coinage 1.2.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats
+1.5.0, Atlas 1.8.0, Lullaby 1.1.0) reloads every plugin that lists it two seconds after its own start, under
+`ryvrook.dependents.lock` and in dependency order. RestAPI lists all seven under `OptionalDependencies` at those
+versions, so it comes back on its own under the suite reload rule in TrackerAPI's `docs/DEVELOPMENT.md`. The
+unbind on the way there (state `SHUTDOWN`, then a new plugin object) is logged at FINE only, through the second
+log consumer of `Siblings`. An older copy bound under `always` does not reload RestAPI, so its reason names
+`/plugin reload Ryvrook:RestAPI` and is logged at INFO. Listing the seven also makes the engine load them before
+RestAPI and stop RestAPI first, seen in the smoke run.
 
-Static hooks for a unit to bind from, read from the sibling sources on 2026-10-16: `TrackerApi.onEnable(Consumer)`
-and `onDisable(Runnable)`, the same pair on `CoinageApi` and `AtlasApi`. Dominion has `ApiHolder.get()`, Feats
-`FeatsApi.get()`, Chronicle Stats `ChronicleApi.get()`, all without enable hooks. Lullaby has no API.
+The engine has no plugin enabled event, so presence is still a poll of the plugin manager. The API object each
+unit reads comes from the sibling's static `onEnable(Consumer)` hook and is dropped by `onDisable(Runnable)`, both
+taken back with `removeHooks` in `unbind`. No unit polls `get()` for a sibling at or above `hooksSince`.
 
 ## Reload
 
@@ -684,16 +688,27 @@ docs stay the same whatever order the tests run in.
 | Sibling | Bound from | Read at each request |
 |---|---|---|
 | TrackerAPI 1.1.0 | `TrackerApi.onEnable` and `onDisable`, taken back with `removeHooks` in `unbind` | the API object the hook handed out last |
-| Coinage 1.2.0 (API 4) | `CoinageApi.onEnable`, `onDisable`, `removeHooks` | the same |
-| Atlas 1.7.0 | `AtlasApi.onEnable`, `onDisable`, `removeHooks` (public in 1.7.0) | the same, `SessionApi.get()` for hidden players |
-| Dominion 0.6.2 | `DominionApi.get()` non null | `DominionApi.get()` |
-| Feats 1.6.0 | `FeatsApi.get()` non null | `FeatsApi.get()` |
-| Chronicle Stats 1.4.0 | `ChronicleApi.get()` non null | `ChronicleApi.get()` |
-| Lullaby 1.0.1 | nothing, files only | `Lullaby.json`, `stats.json`, `ignored.json` |
+| Coinage 1.3.0 (API 5) | `CoinageApi.onEnable`, `onDisable`, `removeHooks` | the same |
+| Dominion 0.7.0 (API 2) | `DominionApi.onEnable`, `onDisable`, `removeHooks` | the same |
+| Feats 1.7.0 (API 2) | `FeatsApi.onEnable`, `onDisable`, `removeHooks`, inside `FeatsBridge` | the same |
+| Chronicle Stats 1.5.0 (API 2) | `ChronicleApi.onEnable`, `onDisable`, `removeHooks`, inside `ChronicleBridge` | the same |
+| Atlas 1.8.0 (VERSION 2) | `AtlasApi.onEnable`, `onDisable`, `removeHooks` | the same, `SessionApi.get()` for hidden players |
+| Lullaby 1.1.0 (API 1) | `LullabyApi.onEnable`, `onDisable`, `removeHooks` | the same, `ignored.json` for the opt out count |
 
 `onEnable` runs at once when the API is up, so `bind` registers the hooks, checks that one fired, and removes
 them again before it throws when none did. The registry reports the reason and tries again on the next check. A
 route whose API went away answers 503 `sibling_gone` until the registry unbinds the group.
+
+Each call that came with the version above is wrapped so an older copy bound under `always` still serves what it
+can. A static hook or a default method that is missing throws `NoSuchMethodError` (an abstract method of
+`AtlasApi` missing in the implementing class throws `AbstractMethodError`, a class missing altogether
+`NoClassDefFoundError`), and the unit falls back: `DominionApi.get()` and `FeatsApi.get()` and `ChronicleApi.get()`
+on every request instead of the hooks, `Initiator.plugin("RestAPI")` instead of `Initiator.apiKey`, the ranked
+`top` instead of `factions()`, the siege banners instead of `sieges()`, the export files instead of `FeatsApi.top`
+and Chronicle's boards and totals, `atlas.json` instead of `publicUrl()`. Routes with no old path answer 501
+`not_supported`. Lullaby 1.0.1 has no `LullabyApi` class, `bind` turns the `NoClassDefFoundError` into a reason.
+`CoinageApi.API_VERSION` is read through reflection on the live class, the field is a compile time constant that
+javac would inline with the version of the jar RestAPI was built against.
 
 #### Threads
 
@@ -719,28 +734,35 @@ nothing is subscribed with 0. The subscription is closed in `unbind` and in the 
 - Coinage. `Currencies.resolve` (null is the primary), `Accounts.get`, `byHandle`, `uuidOf`, `shared`, `players`,
   `all`, `top`, `rank`, `Ledger.history`, `search`, `find`, `stats`, `Reports.netWorth`, `topNetWorth`, `today`,
   `days`. `Accounts.player(uuid)` is never called, it makes an account. The writes call `Ledger.apply` with
-  `Initiator.plugin("RestAPI")`, `plugin("RestAPI")`, `overdraft(false)` and the reason `restapi:<key>[:<reason>]`,
-  whose part before the first colon is the source the daily reports count. Amounts go through `Currency.parse`.
+  `Initiator.apiKey(<key name>)`, `plugin("RestAPI")`, `overdraft(false)` and the reason `restapi:<key>[:<reason>]`.
+  Coinage 1.3.0's `ReportRules.source` counts a move under the key name. The ledger search passes `initiator`
+  through `Query.initiator(name)`, a case insensitive match on `Transaction.initiator().name()`. Amounts go through `Currency.parse`.
   A `Result` that failed answers with the failure in lower case and Coinage's own sentence, 409 for funds, limits
   and locks, 404, 400, 403 or 503 for the others.
-- Dominion. `top(Integer.MAX_VALUE)` is the list of factions in ranking order, the normal factions only (safe and
-  war zones are not in it). Claims come from `territoryProvider().territories(world)` per loaded world, chunk
-  coordinates through `ChunkUtil.xOfChunkIndex` and `zOfChunkIndex` (high and low 32 bits). Sieges are the points
-  of kind `siege`, owner the attacker, `expiresAt` the end of the phase. Warp passwords are never read.
-- Feats. `feats`, `points`, `unlocked`, `progress`, `title`, `rank`, `milestones`, `firsts`, `stats`. The points
-  board and recent unlocks come from `export/feats.json` (top 100, newest 50, `rarity` per feat).
+- Dominion. `top(Integer.MAX_VALUE)` is the ranking order of the normal factions, `factions()` adds the safe and
+  war zones (sorted by tag), which the list puts after the ranked ones and relations and names resolve against.
+  Claims come from `territoryProvider().territories(world)` per loaded world, chunk coordinates through
+  `ChunkUtil.xOfChunkIndex` and `zOfChunkIndex` (high and low 32 bits). Sieges come from `sieges()` and
+  `siegeHistory(factionId, limit)` as `SiegeInfo`, the phase written in lower case. The staff routes call
+  `disband`, `setLeader`, `setPower`, `unclaim` and `unclaimAll` with `by` set to `RestAPI:<key name>` and answer
+  `Result.success()` and `message()`. Warp passwords are never read.
+- Feats. `feats`, `points`, `unlocked`, `progress`, `title`, `rank`, `milestones`, `firsts`, `stats` and `top`
+  (live ranking from the last export with online players merged, cached 5 s inside Feats). The recent unlocks and
+  the rarity per feat come from `export/feats.json` (newest 50, `rarity` per feat).
 - Chronicle Stats. `stats`, `totalsAsync`, `window`, `perId`, `worldKey`, `isTracked`. A counter key is grouped
   under its own definition or the longest prefix definition it starts with. `StatDef` refuses a windowed stat
-  that is not board eligible and SUM. Boards and server totals come from `export/stats.json`, the `ALL` window
-  only, with hidden players as Chronicle exported them.
-- Atlas. `layers`, `MarkerLayer.markers(world)`, point, circle, polygon and polyline fields. `atlas.json` gives
-  `bind`, `port`, `basePath` and `publicUrl`. With `suite.atlas.probe` the summary asks
-  `http://<bind or 127.0.0.1>:<port><basePath>/api/health` with a 1.5 second limit and keeps `ok`, `version` and
-  `status` of the public answer.
-- Lullaby. `Lullaby.json` keys `Mode`, `Requirement`, `Percent`, `Count`, `MinimumSleepers` and `Worlds`, the
-  per world entry over the top level. `stats.json` holds `NightsSkipped` per world, written by bson, so a number
-  may come as `{"$numberLong": "3"}`. `SleepRule.needed` copies Lullaby's `Rule.needed`. Players per world come from
-  RestAPI's own world samples.
+  that is not board eligible and SUM. `boardKeys`, `board` (no world) or `boardAsync` (a world, waited on for
+  `suite.waitMs`), at most `pageSizeMax` 100 rows, with Chronicle's public privacy view. `serverTotals`, `online`,
+  `recentRecords`, `seriesIds` and `series(id, resolution, from, to)`. The series are raw, RestAPI splits them as
+  the dashboard does, `players.*` and `server.*` are activity, the rest performance behind
+  `suite.chronicle.performanceSeries`. A NaN in a point is written as null.
+- Atlas. `layers`, `MarkerLayer.markers(world)`, point, circle, polygon and polyline fields, `publicUrl`,
+  `publicUrlSet`, `renderStatus` and `worlds`. `atlas.json` gives `bind`, `port` and `basePath` for the probe:
+  with `suite.atlas.probe` the summary asks `http://<bind or 127.0.0.1>:<port><basePath>/api/health` with a 1.5
+  second limit and keeps `ok`, `version` and `status` of the public answer.
+- Lullaby. `version`, `apiVersion`, `mode`, `statuses`, `worlds`, `status(world)` and `nightsSkipped()`. Only the
+  length of `Ignored` in `ignored.json` is read from a file. The rule Lullaby 1.0.1 used to be copied into
+  `SleepRule` is gone, `SleepStatus.needed` is Lullaby's own answer.
 
 ## Headless smoke test
 

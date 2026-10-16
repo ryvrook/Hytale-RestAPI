@@ -9,7 +9,7 @@ Hytale 0.7.1 has no remote console, no query port and no management port of its 
 commands from stdin and that is all. RestAPI adds a network API next to it, inside the server process. It has 70
 routes of its own for players, moderation, commands with their output, the live console, plugins, worlds,
 events, webhooks and Prometheus metrics, an OpenAPI document with a docs page, and an RCON listener for tools
-that already speak RCON. With my other mods installed it mounts their routes too, 120 routes with all seven.
+that already speak RCON. With my other mods installed it mounts their routes too, 131 routes with all seven.
 
 The long form of every route, with request bodies, the stop and restart setup, webhook signatures and the
 metric names, is in [docs/API.md](docs/API.md). Every setting is in [docs/SETTINGS.md](docs/SETTINGS.md).
@@ -97,7 +97,7 @@ nothing runs twice.
 |---|---|---|
 | `GET /api/health` | none, `read` for more | `ok` with 200, or `booting`, `stopping` or `stalled` with 503 |
 | `GET /api/server` | `read` | Server, players, worlds with TPS and tick times, JVM, suite mods, route groups |
-| `GET /api/suite` | `read` | Each suite mod, whether its routes are mounted, and what waits on that mod |
+| `GET /api/suite` | `read` | Each suite mod, its version, whether its routes are mounted and bound through hooks |
 
 `stalled` means a world thread missed RestAPI's sample for at least 15 seconds.
 
@@ -207,37 +207,31 @@ first 4086 bytes of a long reply such as `help`.
 
 ## Suite mods
 
-RestAPI checks every `siblings.checkSeconds` for my other mods. While one runs its routes are mounted under
-`/api/<id>` behind its own scope, and when it stops they are taken away, so a key never sees a route that would
-answer "not installed". `GET /api/suite` and the OpenAPI document list only what is mounted. Each setting takes
-`auto` (bind that version or newer), `always` (also an older one) or `never`.
+RestAPI looks for my other mods at start, on `/restapi reload` and every `siblings.checkSeconds`, and binds each
+one through that mod's own enable and disable hooks. While one runs its routes are mounted under `/api/<id>`
+behind its own scope, and when it stops they are taken away, so a key never sees a route that would answer "not
+installed". `GET /api/suite` and the OpenAPI document list only what is mounted. Each setting takes `auto` (bind
+that version or newer), `always` (also an older one, with the routes that version can serve) or `never`.
 
 | Mod | Routes under `/api/<id>` | Scope | Setting |
 |---|---|---|---|
 | TrackerAPI 1.1.0 | `tracker`, `kinds`, `counters/{player}`, `server`, `leaderboards`, `leaderboards/{key}`, `players`, `players/{player}`, `recent`, `journal` | `tracker` | `siblings.tracker` |
-| Coinage 1.2.0 | `coinage`, `currencies`, `balances/{player}`, `accounts`, `accounts/{account}`, `ledger`, `ledger/{id}`, `top`, `reports/today`, `reports/days`, POST `transfer`, `give`, `take` | `coinage`, writes `coinage.write` | `siblings.coinage` |
-| Dominion Factions 0.6.2 | `dominion`, `factions`, `factions/{tag}`, `claims`, `sieges`, `points`, `relations`, `players/{player}`, `at` | `dominion` | `siblings.dominion` |
-| Feats 1.6.0 | `feats`, `players/{player}`, `players/{player}/stats/{key}`, `records`, `top`, `recent` | `feats` | `siblings.feats` |
-| Chronicle Stats 1.4.0 | `chronicle`, `stats`, `players/{player}`, `players/{player}/{stat}`, `top/{stat}`, `server` | `chronicle` | `siblings.chronicle` |
-| Atlas 1.7.0 | `atlas`, `layers`, `markers`, `hidden` | `atlas` | `siblings.atlas` |
-| Lullaby 1.0.1 | `lullaby`, `worlds/{world}` | `lullaby` | `siblings.lullaby` |
+| Coinage 1.3.0 | `coinage`, `currencies`, `balances/{player}`, `accounts`, `accounts/{account}`, `ledger`, `ledger/{id}`, `top`, `reports/today`, `reports/days`, POST `transfer`, `give`, `take` | `coinage`, writes `coinage.write` | `siblings.coinage` |
+| Dominion Factions 0.7.0 | `dominion`, `factions`, `factions/{tag}`, `claims`, `sieges`, `sieges/history`, `points`, `relations`, `players/{player}`, `at`, POST `factions/{tag}/disband`, `factions/{tag}/leader`, `factions/{tag}/unclaim-all`, `players/{player}/power`, `unclaim` | `dominion`, writes `dominion.write` | `siblings.dominion` |
+| Feats 1.7.0 | `feats`, `players/{player}`, `players/{player}/stats/{key}`, `records`, `top`, `recent` | `feats` | `siblings.feats` |
+| Chronicle Stats 1.5.0 | `chronicle`, `stats`, `players/{player}`, `players/{player}/{stat}`, `boards`, `top/{stat}`, `server`, `series`, `series/{id}` | `chronicle` | `siblings.chronicle` |
+| Atlas 1.8.0 | `atlas`, `render`, `worlds`, `layers`, `markers`, `hidden` | `atlas` | `siblings.atlas` |
+| Lullaby 1.1.0 | `lullaby`, `worlds/{world}` | `lullaby` | `siblings.lullaby` |
 
-The Coinage writes go through the Coinage ledger with the reason `restapi:<key name>`, so `/coinage` history
-shows which key moved the money, and they take an `Idempotency-Key`. A `/plugin reload` of a bound mod unmounts its group.
-TrackerAPI and Coinage reload RestAPI with them, for the others run `/plugin reload Ryvrook:RestAPI`.
+A Coinage write names the key as the one who moved the money, so `/coinage find` shows "API key shopbot through
+RestAPI" and the daily reports count it under the key's name. `GET /api/coinage/ledger?initiator=shopbot` finds a
+key's moves. The Dominion staff routes act as `RestAPI:<key name>` in the faction log. Both kinds of write need
+their `.write` scope and land in the audit log. Chronicle boards come per window (`today`, `week`, `month`, `all`)
+and per world, and `suite.chronicle.performanceSeries` false keeps the tick and memory series away. Lullaby gives
+who is in bed, who is ready and how many are still needed per world.
 
-Some of it waits on a change in the other mod. Until then RestAPI reads that mod's export files, or leaves the
-route out.
-
-- Coinage has no initiator type for an API key, so a move names RestAPI as the plugin and the key in the reason.
-- Dominion is read only. Staff actions under `dominion.write`, a list that holds safe and war zones, and sieges
-  with both sides and the phase need a Dominion API for them.
-- The Feats points board and recent unlocks come from `export/feats.json`.
-- Chronicle boards per window and the server series need an API call, the all time boards come from
-  `export/stats.json`.
-- Atlas has no call for its render status and the worlds rendered.
-- Lullaby has no API. `/api/lullaby` reads its files and gives players per world and how many the rule needs,
-  not who is asleep.
+A `/plugin reload` of a bound mod unmounts its group for two seconds, then that mod reloads RestAPI and the routes
+come back.
 
 ## Commands
 
@@ -265,7 +259,7 @@ Tokens and request bodies are never written. Reads are left out unless `audit.lo
 ## Settings
 
 Edit `mods/Ryvrook_RestAPI/RestAPI.json` and run `/restapi reload`. A file with a wrong value is refused whole
-and the values in use stay. There are 120 settings, each listed with its default and range in `docs/settings/`.
+and the values in use stay. There are 122 settings, each listed with its default and range in `docs/settings/`.
 
 | Section | Keys | What it covers |
 |---|---|---|
@@ -278,7 +272,7 @@ and the values in use stay. There are 120 settings, each listed with its default
 | `events`, `webhooks`, `metrics` | 18 | Event types, the ring, retries, queue size, private targets, `metrics.public` |
 | `docs` | 5 | Open document, page, Send box, title, server URL |
 | `rcon` | 6 | Off by default, bind, port 25575, connections, idle time, failed logins |
-| `suite` | 11 | Page sizes, sibling waits, the TrackerAPI recent ring, Coinage write caps |
+| `suite` | 13 | Page sizes, sibling waits, the TrackerAPI recent ring, Coinage and Dominion writes, Chronicle series |
 
 For an API that reads and never changes anything, give keys `read` only, or set `players.readOnly` true and
 `commands.enabled` and `control.enabled` false. Every sentence RestAPI says in game or in the console is in
