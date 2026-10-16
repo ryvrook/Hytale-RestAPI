@@ -27,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class FeatsRoutesTest {
     static final UUID STEVE = UUID.fromString("00000000-0000-0000-0000-00000000000a");
 
-    static final class FakeFeats implements FeatsSource {
+    /** Feats as 1.6.0 answered, with no top call, so the board comes from the export. */
+    static class FakeFeats implements FeatsSource {
         @Override
         public List<FeatInfo> feats() {
             return List.of(new FeatInfo("first_steps", "First Steps", "Walk.", "Exploration", "Bronze", false, 5, "personal"),
@@ -138,7 +139,7 @@ class FeatsRoutesTest {
     }
 
     @Test
-    void theLeaderboardAndRecentUnlocksNeedTheExport() throws Exception {
+    void anOlderFeatsGivesTheBoardAndRecentUnlocksFromTheExport() throws Exception {
         Response missing = calls.get("/api/feats/top");
         assertEquals(503, missing.status());
         assertEquals("file_missing", Calls.json(missing).get("error").getAsString());
@@ -147,6 +148,29 @@ class FeatsRoutesTest {
         assertEquals(1, top.getAsJsonArray("players").size());
         assertEquals("Steve", top.getAsJsonArray("players").get(0).getAsJsonObject().get("name").getAsString());
         assertEquals(1, top.get("online").getAsInt());
+        assertEquals("export", top.get("source").getAsString());
         assertEquals(1, Calls.json(calls.get("/api/feats/recent")).getAsJsonArray("unlocks").size());
+    }
+
+    @Test
+    void theBoardComesFromFeatsTop() {
+        int[] asked = {0};
+        FeatsSource live = new FakeFeats() {
+            @Override
+            public List<dev.ryvrook.feats.api.LeaderboardEntry> top(int limit) {
+                asked[0] = limit;
+                return List.of(new dev.ryvrook.feats.api.LeaderboardEntry(1, STEVE, "Steve", 140, 31, 99L),
+                        new dev.ryvrook.feats.api.LeaderboardEntry(2, null, "Alex", 90, 12, 50L));
+            }
+        };
+        Calls calls = new Calls(FeatsRoutes.routes(live, new JsonFile(file, "Feats"), () -> Limits.DEFAULTS));
+        JsonObject top = Calls.json(calls.get("/api/feats/top?limit=2"));
+        assertEquals(2, asked[0]);
+        assertEquals("api", top.get("source").getAsString());
+        JsonObject first = top.getAsJsonArray("players").get(0).getAsJsonObject();
+        assertEquals(140, first.get("points").getAsInt());
+        assertEquals(31, first.get("unlocked").getAsInt());
+        assertEquals(STEVE.toString(), first.get("uuid").getAsString());
+        assertTrue(top.getAsJsonArray("players").get(1).getAsJsonObject().get("uuid").isJsonNull());
     }
 }

@@ -28,7 +28,7 @@ public final class SuiteModule implements RestModule {
             Sibling.TRACKER, List.of(),
             Sibling.COINAGE, List.of(),
             Sibling.DOMINION, List.of(),
-            Sibling.FEATS, List.of("A points leaderboard call, today it comes from export/feats.json"),
+            Sibling.FEATS, List.of(),
             Sibling.CHRONICLE, List.of("Boards per window and the server series, today the all time boards come from export/stats.json"),
             Sibling.ATLAS, List.of("Render status and the worlds rendered"),
             Sibling.LULLABY, List.of("A read API with the sleepers per world, today the files are read"));

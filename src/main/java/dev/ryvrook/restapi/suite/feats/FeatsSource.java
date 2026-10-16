@@ -2,6 +2,7 @@ package dev.ryvrook.restapi.suite.feats;
 
 import dev.ryvrook.feats.api.FeatInfo;
 import dev.ryvrook.feats.api.FeatProgress;
+import dev.ryvrook.feats.api.LeaderboardEntry;
 import dev.ryvrook.feats.api.WorldRecord;
 
 import java.util.List;
@@ -31,4 +32,12 @@ public interface FeatsSource {
     Map<String, WorldRecord> firsts();
 
     long stats(UUID player, String key);
+
+    /**
+     * The points board, best first, from {@code FeatsApi.top} (Feats 1.7.0 and newer). Null when this Feats has no
+     * such call, the routes then read export/feats.json.
+     */
+    default List<LeaderboardEntry> top(int limit) {
+        return null;
+    }
 }

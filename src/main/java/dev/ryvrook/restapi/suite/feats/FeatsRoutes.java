@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.ryvrook.feats.api.FeatInfo;
 import dev.ryvrook.feats.api.FeatProgress;
+import dev.ryvrook.feats.api.LeaderboardEntry;
 import dev.ryvrook.feats.api.WorldRecord;
 import dev.ryvrook.restapi.RestApi;
 import dev.ryvrook.restapi.auth.Scope;
@@ -33,22 +34,33 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * The Feats route group under /api/feats. Definitions, player progress and world records come from FeatsApi.
- * The points leaderboard and the recent unlocks come from {@code export/feats.json}, which Feats writes for Atlas
- * and other tools, since the API has no call for either yet.
+ * The Feats route group under /api/feats. Definitions, player progress, world records and the points board come
+ * from FeatsApi, bound through its enable and disable hooks. The recent unlocks and the rarity per feat come from
+ * {@code export/feats.json}, which Feats writes for Atlas and other tools. An older Feats bound under always gives
+ * the points board from the export as well.
  */
 public final class FeatsRoutes implements SiblingUnit {
     static final String GROUP = Sibling.FEATS.group();
     static final Scope SCOPE = Sibling.FEATS.scope();
     static final String MOD = "Feats";
 
+    private FeatsBridge bridge;
+
     @Override
     public List<Route> bind(RestApi api) {
-        if (!FeatsBridge.present()) {
-            throw new IllegalStateException("Feats has not published its API yet");
-        }
+        FeatsBridge b = new FeatsBridge();
+        b.bind();
+        bridge = b;
         JsonFile export = new JsonFile(Folders.of(api, Sibling.FEATS).resolve("export").resolve("feats.json"), MOD);
-        return routes(new FeatsBridge(), export, Limits.live());
+        return routes(b, export, Limits.live());
+    }
+
+    @Override
+    public void unbind() {
+        if (bridge != null) {
+            bridge.unbind();
+            bridge = null;
+        }
     }
 
     static List<Route> routes(FeatsSource feats, JsonFile export, Supplier<Limits> limits) {
@@ -73,9 +85,11 @@ public final class FeatsRoutes implements SiblingUnit {
                 "Server milestones reached and server firsts claimed, with who and when.",
                 call -> records(feats)));
         out.add(Route.of(GROUP, "GET", "/api/feats/top", SCOPE, Access.READ,
-                "The points leaderboard from export/feats.json, the top 100 at most.",
-                call -> top(export, call, limits.get())).doc(new RouteDoc(
-                List.of(new RouteDoc.Param("limit", "Rows")), null, null, List.of("file_missing", "file_broken"))));
+                "The points leaderboard as /feats top ranks it, live with the players online merged in.",
+                call -> top(feats, export, call, limits.get())).doc(new RouteDoc(
+                List.of(new RouteDoc.Param("limit", "Rows")), null,
+                "{\"source\":\"api\",\"players\":[{\"rank\":1,\"uuid\":\"...\",\"name\":\"Steve\",\"points\":140,\"unlocked\":31,\"lastUnlockAt\":1760620000000}]}",
+                List.of("file_missing", "file_broken"))));
         out.add(Route.of(GROUP, "GET", "/api/feats/recent", SCOPE, Access.READ,
                 "The newest unlocks from export/feats.json, newest first, 50 at most.",
                 call -> recent(export, call, limits.get())).doc(new RouteDoc(
@@ -218,8 +232,30 @@ public final class FeatsRoutes implements SiblingUnit {
         return a;
     }
 
-    private static Response top(JsonFile export, Call call, Limits limits) {
-        return fromExport(export, "players", "players", limits.limit(call));
+    private static Response top(FeatsSource feats, JsonFile export, Call call, Limits limits) {
+        int limit = limits.limit(call);
+        List<LeaderboardEntry> board = feats.top(limit);
+        if (board == null) {
+            return fromExport(export, "players", "players", limit);
+        }
+        JsonArray rows = new JsonArray();
+        for (LeaderboardEntry e : board) {
+            if (rows.size() >= limit) {
+                break;
+            }
+            JsonObject o = new JsonObject();
+            o.addProperty("rank", e.rank());
+            o.add("uuid", Json.str(e.uuid()));
+            o.addProperty("name", e.name());
+            o.addProperty("points", e.points());
+            o.addProperty("unlocked", e.unlocked());
+            o.addProperty("lastUnlockAt", e.lastUnlockAt());
+            rows.add(o);
+        }
+        JsonObject o = new JsonObject();
+        o.addProperty("source", "api");
+        o.add("players", rows);
+        return Response.ok(o);
     }
 
     private static Response recent(JsonFile export, Call call, Limits limits) {
@@ -244,6 +280,7 @@ public final class FeatsRoutes implements SiblingUnit {
             }
         }
         JsonObject o = new JsonObject();
+        o.addProperty("source", "export");
         o.addProperty("exportedAt", export.modifiedAt());
         if (doc.has("online")) {
             o.add("online", doc.get("online"));
