@@ -4,7 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.ryvrook.atlas.api.AtlasApi;
 import dev.ryvrook.atlas.api.MarkerLayer;
+import dev.ryvrook.atlas.api.RenderStatus;
 import dev.ryvrook.atlas.api.Tier;
+import dev.ryvrook.atlas.api.WorldStatus;
 import dev.ryvrook.restapi.auth.Scope;
 import dev.ryvrook.restapi.http.Route;
 import dev.ryvrook.restapi.suite.Calls;
@@ -18,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +32,10 @@ class AtlasRoutesTest {
     /** AtlasApi with layers made the way Atlas makes them. */
     static final class FakeAtlas extends AtlasApi {
         final List<MarkerLayer> layers = new ArrayList<>();
+        String publicUrl = "http://your-server-address:8123/";
+        boolean publicUrlSet;
+        RenderStatus render = new RenderStatus(0, 0, 0, false, Map.of(), -1, 0);
+        List<WorldStatus> worlds = List.of();
 
         MarkerLayer add(String plugin, String id) {
             MarkerLayer l = newLayer(plugin, id, (layer, world) -> { });
@@ -63,6 +70,26 @@ class AtlasRoutesTest {
         @Override
         public boolean isHidden(UUID player) {
             return false;
+        }
+
+        @Override
+        public String publicUrl() {
+            return publicUrl;
+        }
+
+        @Override
+        public boolean publicUrlSet() {
+            return publicUrlSet;
+        }
+
+        @Override
+        public RenderStatus renderStatus() {
+            return render;
+        }
+
+        @Override
+        public List<WorldStatus> worlds() {
+            return worlds;
         }
     }
 

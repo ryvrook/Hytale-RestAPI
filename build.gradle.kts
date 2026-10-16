@@ -20,10 +20,9 @@ require(hytaleChannel == "release" || hytaleChannel == "pre-release") {
 }
 
 // Sibling jars for the suite route groups, never shipped inside the mod. Each one is given with -PtrackerApiJar,
-// -PcoinageJar, -PdominionJar, -PfeatsJar, -PchronicleJar and -PatlasJar, else the sibling checkout next to this one,
-// else the checkout under ~/Projects. Only the unit classes under dev.ryvrook.restapi.suite.<id> touch them, loaded by
-// name after the presence check, so RestAPI still loads on a server without any of them. Lullaby has no API yet and
-// is read from its files.
+// -PcoinageJar, -PdominionJar, -PfeatsJar, -PchronicleJar, -PatlasJar and -PlullabyJar, else the sibling checkout
+// next to this one, else the checkout under ~/Projects. Only the unit classes under dev.ryvrook.restapi.suite.<id>
+// touch them, loaded by name after the presence check, so RestAPI still loads on a server without any of them.
 fun siblingJar(property: String, vararg candidates: String): String {
     (project.findProperty(property) as String?)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
     val home = System.getProperty("user.home")
@@ -32,12 +31,13 @@ fun siblingJar(property: String, vararg candidates: String): String {
 }
 val trackerApiJar = siblingJar("trackerApiJar", "trackerapi/build/libs/TrackerAPI-1.1.0.jar")
 // The Coinage api jar holds the api packages only.
-val coinageJar = siblingJar("coinageJar", "coinage/build/libs/Coinage-api-1.2.0.jar")
-val dominionJar = siblingJar("dominionJar", "dominion/build/libs/DominionFactions-0.6.2.jar")
-val featsJar = siblingJar("featsJar", "feats/build/libs/Feats-1.6.0.jar")
-val chronicleJar = siblingJar("chronicleJar", "chronicle-stats/build/libs/ChronicleStats-1.4.0.jar")
-val atlasJar = siblingJar("atlasJar", "atlas/build/libs/Atlas-1.7.0.jar")
-val siblingJars = listOf(trackerApiJar, coinageJar, dominionJar, featsJar, chronicleJar, atlasJar)
+val coinageJar = siblingJar("coinageJar", "coinage/build/libs/Coinage-api-1.3.0.jar")
+val dominionJar = siblingJar("dominionJar", "dominion/build/libs/DominionFactions-0.7.0.jar")
+val featsJar = siblingJar("featsJar", "feats/build/libs/Feats-1.7.0.jar")
+val chronicleJar = siblingJar("chronicleJar", "chronicle-stats/build/libs/ChronicleStats-1.5.0.jar")
+val atlasJar = siblingJar("atlasJar", "atlas/build/libs/Atlas-1.8.0.jar")
+val lullabyJar = siblingJar("lullabyJar", "lullaby/build/libs/Lullaby-1.1.0.jar")
+val siblingJars = listOf(trackerApiJar, coinageJar, dominionJar, featsJar, chronicleJar, atlasJar, lullabyJar)
 
 repositories {
     mavenCentral()

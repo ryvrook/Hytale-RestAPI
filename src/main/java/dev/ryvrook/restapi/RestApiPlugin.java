@@ -131,7 +131,8 @@ public final class RestApiPlugin extends JavaPlugin {
         api = new RestApi(version, dir, getLogger(), keys, audit, router, scheduler, new WorldSampler(),
                 System.currentTimeMillis());
         siblings = new Siblings(new EngineProbe(), router, Siblings.byName(getClass().getClassLoader()),
-                SiblingSettings::mode, () -> api, msg -> getLogger().at(Level.INFO).log("%s", msg));
+                SiblingSettings::mode, () -> api, msg -> getLogger().at(Level.INFO).log("%s", msg),
+                msg -> getLogger().at(Level.FINE).log("%s", msg));
         api.siblings(siblings);
 
         getCommandRegistry().registerCommand(new RestApiCommand(this));

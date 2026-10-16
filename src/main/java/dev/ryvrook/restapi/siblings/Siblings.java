@@ -20,8 +20,9 @@ import java.util.function.Supplier;
  * unmounts the group as one unit. Listeners hear every change, the OpenAPI document and the log among them.
  *
  * <p>A sibling that was bound and then reloaded brings new classes that the unit already linked against the old
- * ones cannot use. TrackerAPI and Coinage reload their dependents, RestAPI among them, so their groups come back
- * by themselves. For the others the group is unmounted and the reason names the reload that brings it back.
+ * ones cannot use. Every suite mod from {@link Sibling#hooksSince()} on reloads its dependents, RestAPI among them,
+ * so the group comes back by itself and the unbind in between is logged at the quiet level only. For an older copy
+ * bound under always the reason names the reload that brings it back.
  */
 public final class Siblings {
     private static final class Slot {
@@ -38,11 +39,22 @@ public final class Siblings {
     private final Function<Sibling, Mode> modes;
     private final Supplier<RestApi> api;
     private final Consumer<String> log;
+    private final Consumer<String> quiet;
     private final Map<Sibling, Slot> slots = new EnumMap<>(Sibling.class);
     private final List<Consumer<Presence>> listeners = new CopyOnWriteArrayList<>();
 
     public Siblings(PluginProbe probe, Router router, Function<Sibling, SiblingUnit> loader,
                     Function<Sibling, Mode> modes, Supplier<RestApi> api, Consumer<String> log) {
+        this(probe, router, loader, modes, api, log, line -> { });
+    }
+
+    /**
+     * @param quiet where the lines go that a sibling reload causes on its way to reloading RestAPI anyway, the
+     *              debug level of the plugin logger
+     */
+    public Siblings(PluginProbe probe, Router router, Function<Sibling, SiblingUnit> loader,
+                    Function<Sibling, Mode> modes, Supplier<RestApi> api, Consumer<String> log, Consumer<String> quiet) {
+        this.quiet = quiet;
         this.probe = probe;
         this.router = router;
         this.loader = loader;
@@ -126,9 +138,14 @@ public final class Siblings {
                 why = "version " + found.version() + " is older than " + s.minimum();
             }
         }
+        boolean comesBack = found != null && s.reloadsDependents(found.version());
         if (why == null && reloaded) {
-            why = s.pluginName() + " was reloaded while RestAPI ran. Run /plugin reload Ryvrook:RestAPI to bind it again";
+            why = comesBack
+                    ? s.pluginName() + " was reloaded and reloads RestAPI in a moment, which binds it again"
+                    : s.pluginName() + " was reloaded while RestAPI ran. Run /plugin reload Ryvrook:RestAPI to bind it again";
         }
+        // A sibling that is stopping or was reloaded and reloads its dependents brings RestAPI back on its own.
+        boolean passing = comesBack && slot.linkedTo != null && (reloaded || !found.running());
 
         if (slot.unit != null && (why != null || identity != slot.identity)) {
             unbind(s, slot);
@@ -147,7 +164,7 @@ public final class Siblings {
             boolean alwaysMissing = mode == Mode.ALWAYS && !next.bound()
                     && !java.util.Objects.equals(before.reason(), next.reason());
             if (before.bound() != next.bound() || alwaysMissing) {
-                log.accept(describe(next));
+                (passing ? quiet : log).accept(describe(next));
             }
             for (Consumer<Presence> l : listeners) {
                 try {

@@ -13,13 +13,13 @@
   "ServerVersion": ">=0.7.0",
   "Dependencies": {},
   "OptionalDependencies": {
-    "Ryvrook:TrackerAPI": ">=0.1.0",
-    "Ryvrook:Coinage": ">=0.1.0",
-    "Ryvrook:Dominion": ">=0.1.0",
-    "Ryvrook:Feats": ">=0.1.0",
-    "Ryvrook:ChronicleStats": ">=0.1.0",
-    "Ryvrook:Atlas": ">=0.1.0",
-    "Ryvrook:Lullaby": ">=0.1.0"
+    "Ryvrook:TrackerAPI": ">=1.1.0",
+    "Ryvrook:Coinage": ">=1.3.0",
+    "Ryvrook:Dominion": ">=0.7.0",
+    "Ryvrook:Feats": ">=1.7.0",
+    "Ryvrook:ChronicleStats": ">=1.5.0",
+    "Ryvrook:Atlas": ">=1.8.0",
+    "Ryvrook:Lullaby": ">=1.1.0"
   },
   "LoadBefore": {},
   "DisabledByDefault": false,

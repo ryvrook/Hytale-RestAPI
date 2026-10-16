@@ -61,7 +61,7 @@ class SiblingsTest {
 
     @Test
     void aRunningSiblingMountsItsGroup() {
-        installed.put(Sibling.DOMINION, running("0.6.2"));
+        installed.put(Sibling.DOMINION, running("0.7.0"));
         Siblings s = make();
         s.check();
         Presence p = s.presence(Sibling.DOMINION);
@@ -69,14 +69,14 @@ class SiblingsTest {
         assertEquals(1, p.routes());
         assertTrue(router.mounted("suite.dominion"));
         assertEquals(List.of("bind dominion"), calls);
-        assertTrue(log.getFirst().contains("bound Dominion 0.6.2"), log.getFirst());
+        assertTrue(log.getFirst().contains("bound Dominion 0.7.0"), log.getFirst());
         s.check();
         assertEquals(List.of("bind dominion"), calls, "a second check with nothing changed binds nothing");
     }
 
     @Test
     void goingAwayUnmountsTheGroup() {
-        installed.put(Sibling.COINAGE, running("1.2.0"));
+        installed.put(Sibling.COINAGE, running("1.3.0"));
         Siblings s = make();
         s.check();
         installed.remove(Sibling.COINAGE);
@@ -88,11 +88,11 @@ class SiblingsTest {
 
     @Test
     void anOldVersionBindsOnlyUnderAlways() {
-        installed.put(Sibling.FEATS, running("1.5.1"));
+        installed.put(Sibling.FEATS, running("1.6.0"));
         Siblings s = make();
         s.check();
         assertFalse(s.presence(Sibling.FEATS).bound());
-        assertEquals("version 1.5.1 is older than 1.6.0", s.presence(Sibling.FEATS).reason());
+        assertEquals("version 1.6.0 is older than 1.7.0", s.presence(Sibling.FEATS).reason());
         modes.put(Sibling.FEATS, Mode.ALWAYS);
         s.check();
         assertTrue(s.presence(Sibling.FEATS).bound());
@@ -101,7 +101,7 @@ class SiblingsTest {
 
     @Test
     void neverKeepsTheRoutesAwayAndUnbindsOnChange() {
-        installed.put(Sibling.ATLAS, running("1.7.0"));
+        installed.put(Sibling.ATLAS, running("1.8.0"));
         Siblings s = make();
         s.check();
         assertTrue(router.mounted("suite.atlas"));
@@ -113,14 +113,15 @@ class SiblingsTest {
 
     @Test
     void aSiblingNotYetEnabledWaits() {
-        installed.put(Sibling.LULLABY, new PluginProbe.Found(new Object(), "1.0.1", "START"));
+        installed.put(Sibling.LULLABY, new PluginProbe.Found(new Object(), "1.1.0", "START"));
         Siblings s = make();
         s.check();
         assertEquals("its state is START", s.presence(Sibling.LULLABY).reason());
     }
 
     @Test
-    void aReloadedSiblingIsUnboundUntilRestApiReloads() {
+    void anOldCopyReloadedUnderAlwaysNamesTheReload() {
+        modes.put(Sibling.DOMINION, Mode.ALWAYS);
         installed.put(Sibling.DOMINION, running("0.6.2"));
         Siblings s = make();
         s.check();
@@ -130,6 +131,37 @@ class SiblingsTest {
         assertFalse(p.bound());
         assertTrue(p.reason().contains("/plugin reload Ryvrook:RestAPI"), p.reason());
         assertEquals(List.of("bind dominion", "unbind dominion"), calls);
+        assertTrue(log.getLast().contains("/plugin reload"), "an old copy is not reloading RestAPI, so it is logged");
+    }
+
+    @Test
+    void aReloadOfASiblingWithHooksStaysQuiet() {
+        List<String> quiet = new ArrayList<>();
+        installed.put(Sibling.DOMINION, running("0.7.0"));
+        Siblings s = new Siblings(installed::get, router, Unit::new, x -> Mode.AUTO, () -> null, log::add, quiet::add);
+        s.check();
+        assertEquals(1, log.size());
+        installed.put(Sibling.DOMINION, new PluginProbe.Found(new Object(), "0.7.0", "SHUTDOWN"));
+        s.check();
+        installed.put(Sibling.DOMINION, running("0.7.0"));
+        s.check();
+        Presence p = s.presence(Sibling.DOMINION);
+        assertFalse(p.bound());
+        assertTrue(p.reason().contains("reloads RestAPI in a moment"), p.reason());
+        assertEquals(1, log.size(), "the reload on its way back logs nothing at info");
+        assertEquals(1, quiet.size());
+    }
+
+    @Test
+    void hooksStartAtTheVersionInTheTable() {
+        assertTrue(Sibling.FEATS.reloadsDependents("1.7.0"));
+        assertTrue(Sibling.FEATS.reloadsDependents("1.10.0"));
+        assertFalse(Sibling.FEATS.reloadsDependents("1.6.0"));
+        assertFalse(Sibling.FEATS.reloadsDependents(null));
+        for (Sibling x : Sibling.values()) {
+            assertFalse(dev.ryvrook.restapi.util.Versions.below(x.minimum(), x.hooksSince()),
+                    x + " binds at its minimum through hooks");
+        }
     }
 
     @Test
@@ -145,7 +177,7 @@ class SiblingsTest {
 
     @Test
     void aBuildWithoutTheUnitSaysSo() {
-        installed.put(Sibling.CHRONICLE, running("1.4.0"));
+        installed.put(Sibling.CHRONICLE, running("1.5.0"));
         Siblings s = new Siblings(installed::get, router, x -> null, x -> Mode.AUTO, () -> null, log::add);
         s.check();
         assertEquals("this build of RestAPI has no routes for it yet", s.presence(Sibling.CHRONICLE).reason());
@@ -153,7 +185,7 @@ class SiblingsTest {
 
     @Test
     void aUnitMayNotServeOutsideItsPathOrScope() {
-        installed.put(Sibling.COINAGE, running("1.2.0"));
+        installed.put(Sibling.COINAGE, running("1.3.0"));
         SiblingUnit rogue = api -> List.of(Route.of(Sibling.COINAGE.group(), "GET", "/api/players", Sibling.COINAGE.scope(),
                 Access.READ, "x", c -> Response.text(200, "")));
         Siblings s = new Siblings(installed::get, router, x -> rogue, x -> Mode.AUTO, () -> null, log::add);
@@ -164,8 +196,8 @@ class SiblingsTest {
 
     @Test
     void aWriteScopeIsAcceptedOnlyWhereTheSiblingHasOne() {
-        installed.put(Sibling.COINAGE, running("1.2.0"));
-        installed.put(Sibling.FEATS, running("1.6.0"));
+        installed.put(Sibling.COINAGE, running("1.3.0"));
+        installed.put(Sibling.FEATS, running("1.7.0"));
         SiblingUnit coinage = api -> List.of(Route.of("suite.coinage", "POST", "/api/coinage/give", Scope.COINAGE_WRITE,
                 Access.DANGEROUS, "x", c -> Response.text(200, "")));
         SiblingUnit feats = api -> List.of(Route.of("suite.feats", "POST", "/api/feats/x", Scope.COINAGE_WRITE,
@@ -197,7 +229,7 @@ class SiblingsTest {
 
     @Test
     void listenersHearEveryChange() {
-        installed.put(Sibling.ATLAS, running("1.7.0"));
+        installed.put(Sibling.ATLAS, running("1.8.0"));
         Siblings s = make();
         List<Presence> heard = new ArrayList<>();
         s.listen(heard::add);
@@ -213,8 +245,8 @@ class SiblingsTest {
 
     @Test
     void closeUnbindsEverything() {
-        installed.put(Sibling.ATLAS, running("1.7.0"));
-        installed.put(Sibling.LULLABY, running("1.0.1"));
+        installed.put(Sibling.ATLAS, running("1.8.0"));
+        installed.put(Sibling.LULLABY, running("1.1.0"));
         Siblings s = make();
         s.check();
         s.close();

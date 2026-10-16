@@ -66,6 +66,8 @@ public final class SuiteModule implements RestModule {
             o.addProperty("installed", p.installed());
             o.addProperty("version", p.version());
             o.addProperty("minimum", s.minimum());
+            o.addProperty("hooksSince", s.hooksSince());
+            o.addProperty("hooks", s.reloadsDependents(p.version()));
             o.addProperty("mode", p.mode().key());
             o.addProperty("bound", p.bound());
             o.addProperty("scope", s.scope().id());
