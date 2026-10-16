@@ -3,12 +3,11 @@
 Every notable change to RestAPI is recorded here. The format follows Keep a Changelog and the project uses
 semantic versioning.
 
-## Unreleased
-
 ## 0.2.0 - 2026-10-16
 
-Not released yet. Needs the Hytale 0.7.0 release server or newer. The suite groups need TrackerAPI 1.1.0,
-Coinage 1.3.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0 and Lullaby 1.1.0.
+The first public file, with everything from 0.1.0 below. Needs the Hytale 0.7.0 release server or newer. The
+suite groups need TrackerAPI 1.1.0, Coinage 1.3.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats 1.5.0, Atlas
+1.8.0, Lullaby 1.1.0 and SocialBridge 0.2.0.
 
 ### Added
 
@@ -36,8 +35,13 @@ Coinage 1.3.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats 1.5.0, Atlas 1.8.0 a
 - Dominion staff routes under `dominion.write`: disband, leader, power, unclaim and unclaim all, acting as
   `RestAPI:<key name>`, each with an audit line. `suite.dominion.writes` turns them off.
 - `GET /api/dominion/sieges/history`, `/api/chronicle/boards`, `/api/chronicle/series` and `series/{id}`,
-  `/api/atlas/render` and `/api/atlas/worlds`. 131 routes with all seven suite mods.
+  `/api/atlas/render` and `/api/atlas/worlds`.
 - `?initiator=<name>` on `GET /api/coinage/ledger`, and `suite.chronicle.performanceSeries`.
+- SocialBridge route group under `/api/socialbridge`: the Discord user linked to a player and the player linked to
+  a Discord user, and `POST /api/socialbridge/post` under the new `socialbridge.write` scope for a line or an embed
+  in one of its channels. `siblings.socialbridge` controls it. 135 routes with all eight suite mods.
+- After a reload of a sibling that does not reload its dependents, SocialBridge 0.2.0 or an older copy bound
+  under `always`, RestAPI reloads itself once under the suite lock instead of asking for `/plugin reload`.
 
 ### Changed
 

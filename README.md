@@ -9,7 +9,7 @@ Hytale 0.7.1 has no remote console, no query port and no management port of its 
 commands from stdin and that is all. RestAPI adds a network API next to it, inside the server process. It has 70
 routes of its own for players, moderation, commands with their output, the live console, plugins, worlds,
 events, webhooks and Prometheus metrics, an OpenAPI document with a docs page, and an RCON listener for tools
-that already speak RCON. With my other mods installed it mounts their routes too, 131 routes with all seven.
+that already speak RCON. With my other mods installed it mounts their routes too, 135 routes with all eight.
 
 The long form of every route, with request bodies, the stop and restart setup, webhook signatures and the
 metric names, is in [docs/API.md](docs/API.md). Every setting is in [docs/SETTINGS.md](docs/SETTINGS.md).
@@ -50,8 +50,8 @@ against HyRESTAPI, unless `keys.acceptXApiKey` is false.
 | `server` | Server config, saves, backups, time, weather, stop |
 | `metrics` | `/metrics` |
 | `events` | The event stream and webhooks |
-| `tracker`, `coinage`, `dominion`, `feats`, `chronicle`, `atlas`, `lullaby` | That suite mod's routes while it runs |
-| `coinage.write`, `dominion.write` | Changes through Coinage and Dominion |
+| `tracker`, `coinage`, `dominion`, `feats`, `chronicle`, `atlas`, `lullaby`, `socialbridge` | That suite mod's routes while it runs |
+| `coinage.write`, `dominion.write`, `socialbridge.write` | Changes through Coinage and Dominion, posts through SocialBridge |
 | `all` | Every scope |
 
 A key in `keys.json` can carry its own `requestsPerMinute` and an `allowFrom` list of addresses or CIDR ranges.
@@ -222,16 +222,21 @@ that version or newer), `always` (also an older one, with the routes that versio
 | Chronicle Stats 1.5.0 | `chronicle`, `stats`, `players/{player}`, `players/{player}/{stat}`, `boards`, `top/{stat}`, `server`, `series`, `series/{id}` | `chronicle` | `siblings.chronicle` |
 | Atlas 1.8.0 | `atlas`, `render`, `worlds`, `layers`, `markers`, `hidden` | `atlas` | `siblings.atlas` |
 | Lullaby 1.1.0 | `lullaby`, `worlds/{world}` | `lullaby` | `siblings.lullaby` |
+| SocialBridge 0.2.0 | `socialbridge`, `links/{player}`, `users/{user}`, POST `post` | `socialbridge`, writes `socialbridge.write` | `siblings.socialbridge` |
 
 A Coinage write names the key as the one who moved the money, so `/coinage find` shows "API key shopbot through
 RestAPI" and the daily reports count it under the key's name. `GET /api/coinage/ledger?initiator=shopbot` finds a
 key's moves. The Dominion staff routes act as `RestAPI:<key name>` in the faction log. Both kinds of write need
 their `.write` scope and land in the audit log. Chronicle boards come per window (`today`, `week`, `month`, `all`)
 and per world, and `suite.chronicle.performanceSeries` false keeps the tick and memory series away. Lullaby gives
-who is in bed, who is ready and how many are still needed per world.
+who is in bed, who is ready and how many are still needed per world. SocialBridge answers which Discord user is
+linked to a player and the other way round, and `POST /api/socialbridge/post` with
+`{"channel": "events", "text": "The market restocked", "title": "Market"}` posts a line, or an embed when a title
+is given, to one of its channels.
 
 A `/plugin reload` of a bound mod unmounts its group for two seconds, then that mod reloads RestAPI and the routes
-come back.
+come back. SocialBridge 0.2.0 does not reload the plugins that list it, so after a reload of SocialBridge RestAPI
+reloads itself three seconds later, once.
 
 ## Commands
 
@@ -259,13 +264,13 @@ Tokens and request bodies are never written. Reads are left out unless `audit.lo
 ## Settings
 
 Edit `mods/Ryvrook_RestAPI/RestAPI.json` and run `/restapi reload`. A file with a wrong value is refused whole
-and the values in use stay. There are 122 settings, each listed with its default and range in `docs/settings/`.
+and the values in use stay. There are 123 settings, each listed with its default and range in `docs/settings/`.
 
 | Section | Keys | What it covers |
 |---|---|---|
 | `http` | 11 | Bind, port 8125, base path, body and stream limits, trusted proxies, CORS |
 | `keys`, `limits`, `audit` | 10 | The first key, `X-API-Key`, requests per minute, the audit log |
-| `server`, `siblings` | 9 | World sample interval, the suite check and `auto`, `always` or `never` per mod |
+| `server`, `siblings` | 10 | World sample interval, the suite check and `auto`, `always` or `never` per mod |
 | `players` | 15 | Read only mode, world timeout, give and ban caps, protected groups, which routes mount |
 | `commands`, `console` | 20 | Deny list, `allowFrom`, permissions of the command sender, timeouts, idempotency, the log ring |
 | `control` | 15 | Stop, plugin load, world unload and config edit switches, timeouts, the restart exit code |

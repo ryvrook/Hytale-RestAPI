@@ -405,6 +405,7 @@ never sees a route that answers "not installed". A key needs the mod's scope, `a
 | Chronicle Stats 1.5.0 | `/api/chronicle`, `stats`, `players/{player}`, `players/{player}/{stat}`, `boards`, `top/{stat}`, `server`, `series`, `series/{id}` | `chronicle` | `siblings.chronicle` |
 | Atlas 1.8.0 | `/api/atlas`, `render`, `worlds`, `layers`, `markers`, `hidden` | `atlas` | `siblings.atlas` |
 | Lullaby 1.1.0 | `/api/lullaby`, `worlds/{world}` | `lullaby` | `siblings.lullaby` |
+| SocialBridge 0.2.0 | `/api/socialbridge`, `links/{player}`, `users/{user}`, and `POST post` | `socialbridge`, writes `socialbridge.write` | `siblings.socialbridge` |
 
 A `{player}` is a UUID or a name. Names are looked up among the online players first, then wherever that mod
 keeps names (Coinage's name index, TrackerAPI's names index, the Dominion rosters, the Feats and Chronicle exports),
@@ -462,6 +463,22 @@ points, a day back at hour resolution when nothing is given, empty buckets as nu
 no budget). `worlds` gives each world Atlas renders with players, explored chunks, queued tiles and whether the
 public map shows it. `GET /api/lullaby` gives Lullaby's mode (`native` or `manual`) and per world `online`,
 `eligible`, `inBed`, `ready`, `needed`, `missing`, `progress` from 0 to 1, the cooldown and the nights skipped.
+
+### SocialBridge
+
+`GET /api/socialbridge/links/{player}` gives the Discord user id linked to a player, `users/{user}` the player
+linked to a Discord user id, both 404 `not_linked` when there is no link. A `{player}` here is a UUID or the name
+of a player who is online, SocialBridge keeps no name index. `POST /api/socialbridge/post` needs
+`socialbridge.write` and takes `text` (required, cut at 2000 characters), `channel` (`chat`, `events`, `status` or
+a name from SocialBridge's `channels.extra`, `events` when left out), `kind` (`restapi` when left out, SocialBridge
+files it as `api.<kind>`), and `title`, `footer` and `colour` (`#RRGGBB`) for an embed. It answers 409
+`not_posted` when no service runs or the channel is turned off.
+
+```
+curl -X POST -H "Authorization: Bearer $KEY" \
+  -d '{"channel": "status", "text": "Restart in 10 minutes", "title": "Server"}' \
+  http://127.0.0.1:8125/api/socialbridge/post
+```
 
 ### Moving Coinage money
 

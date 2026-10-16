@@ -109,6 +109,7 @@ Settings docs are one file per section under `docs/settings/`, written by the te
 | `RestAPI-command-<run id>`, virtual | Waits for one command run, its grace window and the audit lines |
 | `RestAPI-webhook-<id>`, virtual | One per webhook, delivers its queue in order |
 | `RestAPI-rcon-accept` and `RestAPI-rcon-<n>`, virtual | The RCON accept loop and one per connection |
+| `RestAPI-relink` | A daemon platform thread, only after a reload of a sibling without a dependents pass. Waits three seconds and reloads RestAPI under the suite lock |
 | `RestAPI-stop` | A platform thread that is not a daemon. Counts down a stop and calls `shutdownServer`, since the plugin's shutdown stops the scheduler |
 | Logger threads | `LogTap.add` and the events module's command tap copy a line and return |
 
@@ -116,7 +117,7 @@ Replies to a player go back through `world.execute` on that player's world, as i
 
 ## Suite detection
 
-`Siblings` asks `PluginManager.getPlugin(new PluginIdentifier("Ryvrook", name))` for each of the seven mods at
+`Siblings` asks `PluginManager.getPlugin(new PluginIdentifier("Ryvrook", name))` for each of the eight mods at
 start, on `/restapi reload` and every `siblings.checkSeconds`. It never touches a class of the mod for that. A mod
 is bound when its state is `ENABLED`, its manifest version is at or above the minimum in `Sibling` (or below it
 under `always`), and `siblings.<id>` is not `never`. Binding loads the unit class by name, calls `bind`, checks
@@ -127,12 +128,22 @@ The plugin object is kept at bind. A different object later means the mod was re
 linked against the old copy, so the group stays down until RestAPI itself is reloaded. Every suite mod from the
 version in `Sibling.hooksSince` on (TrackerAPI 1.1.0, Coinage 1.2.0, Dominion 0.7.0, Feats 1.7.0, Chronicle Stats
 1.5.0, Atlas 1.8.0, Lullaby 1.1.0) reloads every plugin that lists it two seconds after its own start, under
-`ryvrook.dependents.lock` and in dependency order. RestAPI lists all seven under `OptionalDependencies` at those
+`ryvrook.dependents.lock` and in dependency order. RestAPI lists all eight under `OptionalDependencies` at those
 versions, so it comes back on its own under the suite reload rule in TrackerAPI's `docs/DEVELOPMENT.md`. The
 unbind on the way there (state `SHUTDOWN`, then a new plugin object) is logged at FINE only, through the second
-log consumer of `Siblings`. An older copy bound under `always` does not reload RestAPI, so its reason names
-`/plugin reload Ryvrook:RestAPI` and is logged at INFO. Listing the seven also makes the engine load them before
-RestAPI and stop RestAPI first, seen in the smoke run.
+log consumer of `Siblings`. Listing them also makes the engine load them before RestAPI and stop RestAPI first,
+seen in the smoke run.
+
+SocialBridge 0.2.0 has the hooks but no dependents pass, and an older copy bound under `always` has neither. For
+those `Siblings` calls `onStaleLink` once per RestAPI instance and `SelfReload` reloads RestAPI on a daemon thread
+of its own (`RestAPI-relink`), three seconds later, under `ryvrook.dependents.lock`, and only when the plugin
+manager still holds the instance that asked. A TrackerAPI or Dominion pass that reloads SocialBridge reloads
+RestAPI right after it, since RestAPI lists SocialBridge and so comes later in the pass order, and the relink then
+finds a new instance and does nothing. Everything the thread needs is built before it sleeps.
+
+Nothing on the stop path loads a sibling class for the first time. `shutdown` calls `unbind` on the bound units
+only, and those touch the hook classes `bind` already loaded. During shutdown the plugin manager holds its write
+lock, and a first load through a sibling's class loader there deadlocks.
 
 The engine has no plugin enabled event, so presence is still a poll of the plugin manager. The API object each
 unit reads comes from the sibling's static `onEnable(Consumer)` hook and is dropped by `onDisable(Runnable)`, both
@@ -142,8 +153,8 @@ taken back with `removeHooks` in `unbind`. No unit polls `get()` for a sibling a
 
 `/restapi reload` reads the three files again in place, remounts the modules, checks the siblings, moves the HTTP
 server when the bind or port changed and leaves it alone otherwise. A `RestAPI.json` with a bad value changes
-nothing. RestAPI never calls `PluginManager.reload` on itself, and the command module must keep any command
-that reloads RestAPI on its deny list.
+nothing. RestAPI calls `PluginManager.reload` on itself only from `SelfReload`, after a sibling without a
+dependents pass was reloaded, and the command module must keep any command that reloads RestAPI on its deny list.
 
 ## Engine facts
 
@@ -694,6 +705,7 @@ docs stay the same whatever order the tests run in.
 | Chronicle Stats 1.5.0 (API 2) | `ChronicleApi.onEnable`, `onDisable`, `removeHooks`, inside `ChronicleBridge` | the same |
 | Atlas 1.8.0 (VERSION 2) | `AtlasApi.onEnable`, `onDisable`, `removeHooks` | the same, `SessionApi.get()` for hidden players |
 | Lullaby 1.1.0 (API 1) | `LullabyApi.onEnable`, `onDisable`, `removeHooks` | the same, `ignored.json` for the opt out count |
+| SocialBridge 0.2.0 (API 1) | `SocialBridgeApi.onEnable`, `onDisable`, `removeHooks` | the same |
 
 `onEnable` runs at once when the API is up, so `bind` registers the hooks, checks that one fired, and removes
 them again before it throws when none did. The registry reports the reason and tries again on the next check. A
@@ -712,7 +724,7 @@ javac would inline with the version of the jar RestAPI was built against.
 
 #### Threads
 
-Every route runs on the HTTP virtual thread. All seven APIs say they are safe from any thread and read memory,
+Every route runs on the HTTP virtual thread. All eight APIs say they are safe from any thread and read memory,
 except these, which complete a future on the sibling's own IO thread and are waited on for `suite.waitMs`:
 `Counters.load`, `nameOf` and `uuidOf` (TrackerAPI names index), `Journal.find` (newest first, at most four at
 once inside TrackerAPI), `Ledger.search` (Coinage journal files) and `ChronicleApi.totalsAsync`. A leaderboard asks
@@ -763,6 +775,10 @@ nothing is subscribed with 0. The subscription is closed in `unbind` and in the 
 - Lullaby. `version`, `apiVersion`, `mode`, `statuses`, `worlds`, `status(world)` and `nightsSkipped()`. Only the
   length of `Ignored` in `ignored.json` is read from a file. The rule Lullaby 1.0.1 used to be copied into
   `SleepRule` is gone, `SleepStatus.needed` is Lullaby's own answer.
+- SocialBridge. `version`, `API_VERSION` through reflection, `linkedUser` and `linkedPlayer` for the Discord
+  service, and `post(channel, Announcement)`. A post with a title or footer becomes an embed, text is cut at 2000
+  characters and titles at 256, and false from `post` (no service running or the channel off) answers 409
+  `not_posted`. SocialBridge files the post under the kind `api.<kind>`.
 
 ## Headless smoke test
 
