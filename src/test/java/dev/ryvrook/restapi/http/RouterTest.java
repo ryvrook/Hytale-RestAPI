@@ -80,4 +80,21 @@ class RouterTest {
         r.mount("p", List.of(get("p", "/api/players/{player}/kick")));
         assertInstanceOf(Router.NotFound.class, r.match("GET", "/api/players//kick"));
     }
+
+    @Test
+    void aTailSegmentTakesTheRestAndLosesToFixedPatterns() {
+        Router r = new Router();
+        r.mount("dashboard", java.util.List.of(
+                Route.of("dashboard", "GET", "/dashboard/{file...}", dev.ryvrook.restapi.auth.Scope.READ, Access.READ, "file", c -> Response.noContent()),
+                Route.of("dashboard", "GET", "/dashboard/assets/{kind}/{name}", dev.ryvrook.restapi.auth.Scope.READ, Access.READ, "icon", c -> Response.noContent()),
+                Route.of("dashboard", "GET", "/dashboard/capabilities", dev.ryvrook.restapi.auth.Scope.READ, Access.READ, "caps", c -> Response.noContent())));
+        Router.Found deep = (Router.Found) r.match("GET", "/dashboard/js/panels/settings.js");
+        assertEquals("/dashboard/{file...}", deep.route().pattern());
+        assertEquals("js/panels/settings.js", deep.params().get("file"));
+        assertEquals("/dashboard/capabilities", ((Router.Found) r.match("GET", "/dashboard/capabilities")).route().pattern());
+        assertEquals("/dashboard/assets/{kind}/{name}", ((Router.Found) r.match("GET", "/dashboard/assets/items/X.png")).route().pattern());
+        assertEquals("/dashboard/{file...}", ((Router.Found) r.match("GET", "/dashboard/assets/items")).route().pattern());
+        assertInstanceOf(Router.NotFound.class, r.match("GET", "/dashboard"));
+        assertInstanceOf(Router.NotFound.class, r.match("GET", "/dashboard/a//b"));
+    }
 }

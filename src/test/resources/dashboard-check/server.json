@@ -1,0 +1,46 @@
+{
+ "restapi": "0.2.0",
+ "server": {
+  "version": "0.7.2",
+  "revision": "d769dc3d57881261a62858e1394f0e4de9a21eca",
+  "patchline": "release",
+  "name": "Orbis Test Realm",
+  "motd": "Welcome back",
+  "maxPlayers": 40,
+  "maxViewRadius": 24,
+  "passwordSet": false,
+  "bootedAt": "2026-10-17T10:37:14.108Z"
+ },
+ "jvm": {
+  "java": "25.0.4.1+1-1-24.04.4-Ubuntu",
+  "cpus": 8,
+  "heapUsedMb": 4310,
+  "heapCommittedMb": 6144,
+  "heapMaxMb": 8192,
+  "threads": 104,
+  "systemLoad": 1.84,
+  "processCpu": 0.21
+ },
+ "config": {
+  "name": "Orbis Test Realm",
+  "motd": "Welcome back",
+  "maxPlayers": 40,
+  "maxViewRadius": 24,
+  "maxViewRadiusLimit": 32,
+  "passwordSet": false,
+  "requireJoinPermission": false,
+  "defaultWorld": "default",
+  "defaultGameMode": "Adventure",
+  "backup": {
+   "configured": true,
+   "enabled": true,
+   "directory": "backups",
+   "frequencyMinutes": 30,
+   "maxCount": 5,
+   "archiveMaxCount": 5
+  },
+  "logLevels": {
+   "Spawning": "SEVERE"
+  }
+ }
+}

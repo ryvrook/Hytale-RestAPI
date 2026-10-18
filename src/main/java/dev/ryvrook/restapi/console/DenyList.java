@@ -12,9 +12,10 @@ import java.util.function.Function;
  * all read as {@code stop}, and {@code pl r X} reads as {@code plugin reload X}.
  *
  * <p>Fixed entries that no setting removes: {@code stop} with its alias {@code shutdown}, any {@code plugin}
- * command that names Ryvrook:RestAPI, {@code restapi reload} and {@code restapi keys}, and {@code sudo} or
- * {@code su} around any refused command. RestAPI never reloads, unloads or stops anything of its own through its
- * own channels, and a key with the commands scope never makes itself a key with more scopes.
+ * command that names Ryvrook:RestAPI, {@code restapi reload}, {@code restapi keys} and {@code restapi dashboard},
+ * and {@code sudo} or {@code su} around any refused command. RestAPI never reloads, unloads or stops anything of
+ * its own through its own channels, and a key with the commands scope never makes itself a key or a dashboard
+ * login with more scopes.
  */
 public final class DenyList {
     /** Words of RestAPI's own plugin id as the plugin commands take it. */
@@ -71,7 +72,8 @@ public final class DenyList {
                 }
             }
         }
-        if (first.equals("restapi") && w.size() > 1 && (w.get(1).equals("reload") || w.get(1).equals("keys"))) {
+        if (first.equals("restapi") && w.size() > 1
+                && (w.get(1).equals("reload") || w.get(1).equals("keys") || w.get(1).equals("dashboard"))) {
             return "restapi " + w.get(1);
         }
         if ((first.equals("sudo") || first.equals("su")) && w.size() > 2) {
@@ -139,6 +141,6 @@ public final class DenyList {
     /** The fixed entries, for GET /api/commands/deny. */
     public static List<String> fixed() {
         return List.of("stop", "shutdown", "plugin <any> Ryvrook:RestAPI", "restapi reload", "restapi keys",
-                "sudo <player> <a refused command>");
+                "restapi dashboard", "sudo <player> <a refused command>");
     }
 }

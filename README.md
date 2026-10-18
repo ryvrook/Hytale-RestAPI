@@ -9,7 +9,8 @@ Hytale 0.7.1 has no remote console, no query port and no management port of its 
 commands from stdin and that is all. RestAPI adds a network API next to it, inside the server process. It has 70
 routes of its own for players, moderation, commands with their output, the live console, plugins, worlds,
 events, webhooks and Prometheus metrics, an OpenAPI document with a docs page, and an RCON listener for tools
-that already speak RCON. With my other mods installed it mounts their routes too, 135 routes with all eight.
+that already speak RCON. With my other mods installed it mounts their routes too, 135 routes with all eight. It
+can also serve an admin dashboard on the same address, off until you turn it on, 9 routes more while it is on.
 
 The long form of every route, with request bodies, the stop and restart setup, webhook signatures and the
 metric names, is in [docs/API.md](docs/API.md). Every setting is in [docs/SETTINGS.md](docs/SETTINGS.md).
@@ -144,7 +145,7 @@ curl -s -X POST http://127.0.0.1:8125/api/commands \
 The command runs as `RestAPI:<key name>`, so the engine's own log line names the key. The audit log gets a
 `started` line before the engine sees the command and the outcome after it. The deny list is checked after
 aliases are resolved, so `/stop`, `STOP` and `shutdown` are the same. No setting removes `stop`, `shutdown`, any
-`plugin` command that names `Ryvrook:RestAPI`, `restapi reload` or `restapi keys`. Command macros are not looked
+`plugin` command that names `Ryvrook:RestAPI`, `restapi reload`, `restapi keys` or `restapi dashboard`. Command macros are not looked
 into, put a macro's name on `commands.deny` when that matters.
 
 ### Plugins, worlds and server control
@@ -190,6 +191,85 @@ names follow the Apex exporter where they overlap, so its dashboards carry over.
 | `GET /docs`, `GET /docs/{file}` | none | A 16 KB page that renders it, with a Send box |
 
 The page loads nothing from elsewhere and keeps the key you paste in memory only.
+
+### Dashboard
+
+Mounted only while `dashboard.enabled` is on, see Dashboard below.
+
+| Route | Scope | What it does |
+|---|---|---|
+| `GET /dashboard`, `GET /dashboard/{file...}` | none | The page and its scripts, styles, images and fonts. `/dashboard` sends the browser on to `/dashboard/` |
+| `GET /dashboard/capabilities` | none | What the page may do. Without a session it answers `{"auth":"session"}` only |
+| `GET /dashboard/login?t=<token>` | none | Turns a login link into a session cookie and opens the page. Without a token, the login page |
+| `POST /dashboard/logout` | none | Ends this browser's session |
+| `GET /dashboard/assets/index.json`, `GET /dashboard/assets/{kind}/{name}.png` | session or `read` | Item, map marker and creature icons from the server's Assets.zip |
+| `GET /dashboard/chronicle/api/avatar/{player}`, `.../api/asset/{path...}` | session or `read` | Character pictures passed through from Chronicle Stats |
+
+## Dashboard
+
+The RestAPI dashboard is a web page for the server owner. It shows what RestAPI reports about the server, the
+players, the worlds and the suite mods, with live charts, the console and the chat. It is read only unless writes
+are turned on, and then it can kick and ban players, run commands, load and reload plugins, change worlds and stop
+or restart the server, with every risky change asking first.
+
+RestAPI serves it from inside the server, so there is no Node and no second process. It is off by default and
+uses the HTTP API's own address, under `http.basePath` when that is set. There is no second web server and no
+other port, and while it is off none of its routes exist.
+
+```
+/restapi dashboard on
+/restapi dashboard login
+```
+
+The first command turns it on and writes `dashboard.enabled` to `RestAPI.json`, so it stays on after a restart.
+The second prints a login link, to you only, in game chat or in the console. Open it in a browser on a machine
+that can reach the HTTP API. With RestAPI on 127.0.0.1 that is the server machine, or yours through
+`ssh -L 8125:127.0.0.1:8125 you@server`. Behind a reverse proxy with TLS, set `docs.serverUrl` to the address the
+proxy serves RestAPI at and the link uses it.
+
+| Command | What it does |
+|---|---|
+| `/restapi dashboard on`, `off` | Mounts or removes the page and its routes without a reload. Off ends every session |
+| `/restapi dashboard status` | On or off, the address, writes, sessions open, game icons and Chronicle Stats pictures |
+| `/restapi dashboard login` | A login link that works once within `dashboard.linkMinutes` |
+| `/restapi dashboard logout` | Ends every session |
+| `/restapi dashboard writes on`, `off` | Lets sessions change the server, or makes them read only again |
+
+| Setting | Default | What it does |
+|---|---|---|
+| `dashboard.enabled` | `false` | Serves the page. The on and off commands change it |
+| `dashboard.writes` | `false` | Lets a session change the server. Off it may only read and the page draws no controls |
+| `dashboard.sessionHours` | `12` | Hours a session lasts without use. Seven days is the limit whatever this says |
+| `dashboard.linkMinutes` | `10` | Minutes a login link works |
+| `dashboard.requestsPerMinute` | `600` | Requests per minute for one session. The page asks for many small things at once |
+| `dashboard.assets` | `""` | Path of Assets.zip for the game icons. Empty finds the archive the server loaded, or Assets.zip in the server folder or the one above |
+| `dashboard.chronicle` | `true` | Passes character pictures through from Chronicle Stats while it is bound |
+
+In plain words, this is how it keeps the server safe.
+
+- A login link carries a random token that works once and runs out after a few minutes. Only someone with
+  `restapi.admin` can make one, and it is shown to them alone. Neither the token nor the cookie is ever written to
+  a log or the audit file, and the console's log stream cuts the token out.
+- Using the link gives the browser a session cookie. RestAPI keeps sessions in memory, so a server restart ends
+  them all, as do `/restapi dashboard logout`, `/restapi dashboard off`, a reload that finds the page turned off,
+  12 hours without use and 7 days in any case. `/restapi reload` keeps them.
+- The cookie is HttpOnly and SameSite Strict, and Secure when a proxy in `http.trustedProxies` says the browser
+  came over https. RestAPI only takes it on requests from the dashboard's own pages and answers 403 to a request
+  from any other site that carries it, a GET included.
+- A session acts as `dashboard:<who made the link>` in the audit log, with every scope and its own request limit.
+  While `dashboard.writes` is off it may only read, any other method answers 403 `read_only`. A key sent with a
+  request always counts instead of the cookie.
+- The page loads its scripts, styles and fonts from RestAPI only, under a Content Security Policy that allows
+  nothing else besides images from the Atlas address for the mini maps.
+- `/restapi dashboard` is on the fixed deny list of the command routes and RCON, so a key with the `commands`
+  scope cannot make itself a login link.
+
+Game icons come from the server's own `Assets.zip`, read entry by entry and never whole. Without one the page
+shows names only. Character pictures come from Chronicle Stats over its own port on this machine, as anyone who
+opens Chronicle's pages would see them. The page files come from
+[github.com/ryvrook/restapi-dashboard](https://github.com/ryvrook/restapi-dashboard), and RestAPI carries a copy
+of them in its jar. The standalone `server.js` there still runs the page against mock data, or on another
+machine against RestAPI with a key.
 
 ## RCON
 
@@ -250,6 +330,7 @@ itself three seconds later, once.
 | `/restapi audit tail [--lines <n>]` | The newest audit lines, 10 by default, at most 50 |
 | `/restapi rcon status` | The RCON listener and its connections |
 | `/restapi webhooks list` | Webhooks with their delivery counts, the URL by host only |
+| `/restapi dashboard on`, `off`, `status`, `login`, `logout`, `writes on`, `writes off` | The admin dashboard, see Dashboard above |
 
 Every command needs `restapi.admin`. The `keys` commands also need `restapi.admin.keys`, so staff who may read
 the status cannot make themselves a key. A key made in game is shown in that player's chat. `/restapi reload`
@@ -258,13 +339,13 @@ never reloads RestAPI through the plugin manager.
 ## Audit log
 
 Every change through the API or RCON, every command with its `started` line and outcome, every
-`/restapi keys` change and reload, and every wrong key goes to `audit/audit-<UTC date>.jsonl` as one JSON line.
+`/restapi keys` change and reload, every `/restapi dashboard` command and dashboard login, and every wrong key goes to `audit/audit-<UTC date>.jsonl` as one JSON line.
 Tokens and request bodies are never written. Reads are left out unless `audit.logReads` is on.
 
 ## Settings
 
 Edit `mods/Ryvrook_RestAPI/RestAPI.json` and run `/restapi reload`. A file with a wrong value is refused whole
-and the values in use stay. There are 123 settings, each listed with its default and range in `docs/settings/`.
+and the values in use stay. There are 130 settings, each listed with its default and range in `docs/settings/`.
 
 | Section | Keys | What it covers |
 |---|---|---|
@@ -277,6 +358,7 @@ and the values in use stay. There are 123 settings, each listed with its default
 | `events`, `webhooks`, `metrics` | 18 | Event types, the ring, retries, queue size, private targets, `metrics.public` |
 | `docs` | 5 | Open document, page, Send box, title, server URL |
 | `rcon` | 6 | Off by default, bind, port 25575, connections, idle time, failed logins |
+| `dashboard` | 7 | Off by default, writes, session and link times, the session request limit, Assets.zip, Chronicle Stats pictures |
 | `suite` | 13 | Page sizes, sibling waits, the TrackerAPI recent ring, Coinage and Dominion writes, Chronicle series |
 
 For an API that reads and never changes anything, give keys `read` only, or set `players.readOnly` true and

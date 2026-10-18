@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "dev.ryvrook"
-version = "0.2.1"
+version = "0.3.0"
 
 java {
     toolchain {
@@ -72,6 +72,10 @@ tasks.test {
     systemProperty("java.util.logging.manager", "com.hypixel.hytale.logger.backend.HytaleLogManager")
     // RESTAPI_WRITE_DOCS=1 lets SettingsDocTest write docs/SETTINGS.md again.
     environment("RESTAPI_WRITE_DOCS", System.getenv("RESTAPI_WRITE_DOCS") ?: "")
+    // RESTAPI_BROWSER_CHECK=1 runs DashboardBrowserCheck, headless Chrome against the dashboard, see docs/DEVELOPMENT.md.
+    for (name in listOf("RESTAPI_BROWSER_CHECK", "RESTAPI_BROWSER_PORT", "RESTAPI_BROWSER_OUT", "DASHBOARD_TOOLS")) {
+        System.getenv(name)?.let { environment(name, it) }
+    }
 }
 
 tasks.withType<JavaCompile>().configureEach {

@@ -2,7 +2,7 @@
   "Group": "Ryvrook",
   "Name": "RestAPI",
   "Version": "@version@",
-  "Description": "An HTTP API for server admins and their scripts, with named keys, scopes, rate limits and an audit log of every change. Binds to 127.0.0.1 until you change it. Suite mods get their own routes when they are installed.",
+  "Description": "An HTTP API for server admins and their scripts, with named keys, scopes, rate limits and an audit log of every change. Binds to 127.0.0.1 until you change it. Suite mods get their own routes when they are installed. Can serve an admin dashboard on the same address, off until you turn it on.",
   "Main": "dev.ryvrook.restapi.RestApiPlugin",
   "Authors": [
     {

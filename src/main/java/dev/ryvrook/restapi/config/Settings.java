@@ -157,6 +157,33 @@ public final class Settings {
         return new LoadReport(read, added, problems);
     }
 
+    /**
+     * Sets one value, in memory and in the file, for a change made by a command such as /restapi dashboard on.
+     * The file is read, the one key is set and the file is written through a temporary file and a move, so the
+     * other keys and anything the admin added stay as they were. A file that does not read changes nothing and
+     * throws, and so does a value the setting refuses.
+     */
+    public static synchronized <T> void persist(Path file, Setting<T> s, T value) throws IOException {
+        T checked = s.coerce(value instanceof Number n ? (Object) n.doubleValue() : value);
+        JsonObject doc = new JsonObject();
+        if (Files.exists(file)) {
+            try {
+                JsonElement parsed = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
+                if (!parsed.isJsonObject()) {
+                    throw new IOException(FILE + " must hold one JSON object");
+                }
+                doc = parsed.getAsJsonObject();
+            } catch (RuntimeException e) {
+                throw new IOException(FILE + " could not be read, " + e.getMessage(), e);
+            }
+        }
+        put(doc, s.key(), toJson(checked));
+        write(file, doc);
+        Map<String, Object> next = new HashMap<>(values);
+        next.put(s.key(), checked);
+        values = Map.copyOf(next);
+    }
+
     /** Puts every setting back to its default. For tests, and for a server without a data folder. */
     public static void useDefaults() {
         Map<String, Object> next = new HashMap<>();

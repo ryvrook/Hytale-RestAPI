@@ -77,9 +77,10 @@ public final class OpenApi {
         Set<String> operationIds = new HashSet<>();
         for (Route r : routes) {
             tags.computeIfAbsent(r.group(), OpenApi::tag);
-            JsonObject item = paths.has(r.pattern()) ? paths.getAsJsonObject(r.pattern()) : new JsonObject();
+            String path = documented(r.pattern());
+            JsonObject item = paths.has(path) ? paths.getAsJsonObject(path) : new JsonObject();
             item.add(r.method().toLowerCase(Locale.ROOT), operation(r, meta, operationIds));
-            paths.add(r.pattern(), item);
+            paths.add(path, item);
         }
         JsonArray tagList = new JsonArray();
         tags.values().forEach(tagList::add);
@@ -229,10 +230,15 @@ public final class OpenApi {
         };
     }
 
+    /** A pattern as OpenAPI writes it. A tail segment {name...} is written {name}, OpenAPI has no form for it. */
+    static String documented(String pattern) {
+        return pattern.replace("...}", "}");
+    }
+
     /** The {name} segments of a pattern, in order. */
     static List<String> pathParams(String pattern) {
         List<String> out = new ArrayList<>();
-        Matcher m = PARAM.matcher(pattern);
+        Matcher m = PARAM.matcher(documented(pattern));
         while (m.find()) {
             out.add(m.group(1));
         }
@@ -242,7 +248,7 @@ public final class OpenApi {
     /** get /api/players/{player}/kick becomes getPlayersByPlayerKick. Repeats get a number. */
     static String operationId(Route r, Set<String> taken) {
         StringBuilder b = new StringBuilder(r.method().toLowerCase(Locale.ROOT));
-        String[] segs = r.pattern().split("/");
+        String[] segs = documented(r.pattern()).split("/");
         for (int i = 0; i < segs.length; i++) {
             String s = segs[i];
             if (s.isEmpty() || (i == 1 && s.equals("api") && segs.length > 2)) {

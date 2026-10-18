@@ -134,7 +134,7 @@ public final class RestApiPlugin extends JavaPlugin {
         String version = getManifest() == null || getManifest().getVersion() == null
                 ? "0.0.0" : getManifest().getVersion().toString();
         scheduler = newScheduler();
-        api = new RestApi(version, dir, getLogger(), keys, audit, router, scheduler, new WorldSampler(),
+        api = new RestApi(version, dir, getLogger(), keys, audit, router, gate, scheduler, new WorldSampler(),
                 System.currentTimeMillis());
         siblings = new Siblings(new EngineProbe(), router, Siblings.byName(getClass().getClassLoader()),
                 SiblingSettings::mode, () -> api, msg -> getLogger().at(Level.INFO).log("%s", msg),
@@ -411,6 +411,42 @@ public final class RestApiPlugin extends JavaPlugin {
             }
             return out;
         });
+    }
+
+    /**
+     * /restapi dashboard on and the other sub commands that change something, answered by the module of that
+     * group under the lock. The module gets a way to mount its own routes again without a full reload.
+     */
+    public CompletableFuture<List<Message>> moduleAct(String group, String topic, String by) {
+        return async(() -> {
+            synchronized (lock) {
+                for (RestModule m : modules) {
+                    if (m.group().equals(group)) {
+                        List<Message> out = m.act(topic, by, () -> remount(m));
+                        if (!out.isEmpty()) {
+                            return out;
+                        }
+                    }
+                }
+                return List.of(Replies.line(Messages.get(MODULE_MISSING, "group", group), Replies.ERROR));
+            }
+        });
+    }
+
+    /** Under lock. Stops one module, mounts its routes again and starts it. */
+    private void remount(RestModule m) {
+        try {
+            m.stop();
+        } catch (RuntimeException | LinkageError e) {
+            getLogger().at(Level.WARNING).withCause(e).log("RestAPI could not stop %s", m.group());
+        }
+        try {
+            router.mount(m.group(), m.routes(api));
+            m.start(api);
+        } catch (Exception | LinkageError e) {
+            router.unmount(m.group());
+            getLogger().at(Level.WARNING).withCause(e).log("RestAPI left out the %s routes", m.group());
+        }
     }
 
     /** /restapi reload. Reads the files again in place, never through the plugin manager. */

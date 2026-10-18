@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Hytale REST API</title>
+  <desc id="desc">Gold code brackets around a connected API hub on a dark blue rounded square.</desc>
+  <rect width="1024" height="1024" rx="224" fill="#15283F"/>
+  <rect x="32" y="32" width="960" height="960" rx="196" fill="none" stroke="#28435F" stroke-width="8"/>
+  <g transform="translate(0 -65)">
+  <g fill="none" stroke="#E8BD62" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M332 304H292V430L224 512L292 594V720H332"/>
+    <path d="M692 304H732V430L800 512L732 594V720H692"/>
+  </g>
+  <g fill="none" stroke="#82C9CC" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 416V352M512 608V672M416 512H376M608 512H648"/>
+  </g>
+  <g fill="#82C9CC">
+    <rect x="466" y="278" width="92" height="92" rx="24"/>
+    <rect x="466" y="654" width="92" height="92" rx="24"/>
+    <circle cx="370" cy="512" r="32"/>
+    <circle cx="654" cy="512" r="32"/>
+  </g>
+  <path d="M512 402L608 457V567L512 622L416 567V457Z" fill="#E8BD62"/>
+  <path d="M512 449L566 480V544L512 575L458 544V480Z" fill="#15283F"/>
+  </g>
+  <text x="512" y="824" text-anchor="middle" fill="#E8BD62" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700" letter-spacing="3">HYTALE REST API</text>
+</svg>

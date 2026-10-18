@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>RestAPI dashboard</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="img/restapi-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="img/restapi-192.png">
+  <link rel="apple-touch-icon" href="img/restapi-180.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/overview">
+      <img src="img/restapi-64.png" width="22" height="22" alt="">
+      <span>RestAPI</span>
+    </a>
+    <span class="server-name" id="server-name"></span>
+    <span class="spacer"></span>
+    <div class="palette" id="palette" hidden>
+      <input type="search" id="palette-input" placeholder="Jump to, press /" aria-label="Jump to a page, player, world or plugin" autocomplete="off">
+      <ul class="palette-list" id="palette-list" role="listbox" hidden></ul>
+    </div>
+    <div class="view-switch" id="view-switch" role="group" aria-label="View">
+      <button type="button" data-view="lively" aria-pressed="true" title="Icons, busts and maps from the game and the suite mods">Lively</button>
+      <button type="button" data-view="data" aria-pressed="false" title="Plain tables, no images">Just data</button>
+    </div>
+    <span class="pill" id="mode-pill" hidden></span>
+    <span class="pill control" id="control-pill" hidden title="Started with --allow-writes, the page can change the server">Control on</span>
+    <span class="pill" id="health-pill" title="Answer of /api/health, checked every 10 seconds">Checking</span>
+    <button class="pill pill-error" id="error-badge" type="button" hidden></button>
+    <button class="pill pill-logout" id="logout-btn" type="button" hidden title="End this browser's session, the dashboard then asks for its password again" aria-label="Log out"><svg class="logout-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span class="logout-text">Log out</span></button>
+    <span class="updated" id="updated"></span>
+  </header>
+  <div class="error-drawer" id="error-drawer" hidden></div>
+  <nav class="side" id="nav" aria-label="Sections"></nav>
+  <main id="main" tabindex="-1"></main>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

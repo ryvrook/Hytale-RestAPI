@@ -3,6 +3,7 @@ package dev.ryvrook.restapi;
 import com.hypixel.hytale.logger.HytaleLogger;
 import dev.ryvrook.restapi.audit.AuditLog;
 import dev.ryvrook.restapi.auth.KeyStore;
+import dev.ryvrook.restapi.http.Gate;
 import dev.ryvrook.restapi.http.Router;
 import dev.ryvrook.restapi.server.WorldSampler;
 import dev.ryvrook.restapi.siblings.Siblings;
@@ -21,6 +22,7 @@ public final class RestApi {
     private final KeyStore keys;
     private final AuditLog audit;
     private final Router router;
+    private final Gate gate;
     private final ScheduledExecutorService scheduler;
     private final WorldSampler worlds;
     private final long startedAt;
@@ -28,13 +30,14 @@ public final class RestApi {
     private final java.util.Map<Class<?>, Object> services = new java.util.concurrent.ConcurrentHashMap<>();
 
     RestApi(String version, Path dataDirectory, HytaleLogger logger, KeyStore keys, AuditLog audit, Router router,
-            ScheduledExecutorService scheduler, WorldSampler worlds, long startedAt) {
+            Gate gate, ScheduledExecutorService scheduler, WorldSampler worlds, long startedAt) {
         this.version = version;
         this.dataDirectory = dataDirectory;
         this.logger = logger;
         this.keys = keys;
         this.audit = audit;
         this.router = router;
+        this.gate = gate;
         this.scheduler = scheduler;
         this.worlds = worlds;
         this.startedAt = startedAt;
@@ -64,6 +67,11 @@ public final class RestApi {
 
     public Router router() {
         return router;
+    }
+
+    /** The request pipeline, for modules that add credentials or count failed logins of their own. */
+    public Gate gate() {
+        return gate;
     }
 
     /** RestAPI's own scheduler with two threads. Never the engine's shared executor. Tasks must not block long. */

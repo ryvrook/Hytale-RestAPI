@@ -38,6 +38,13 @@ class LogRingTest {
     }
 
     @Test
+    void dashboardLoginTokensAreCutToo() {
+        LogRing r = new LogRing(10);
+        add(r, 1, Level.ALL, "[RestAPI] http://127.0.0.1:8125/dashboard/login?t=rdl_" + "x-Y_".repeat(10) + "abc");
+        assertEquals("[RestAPI] http://127.0.0.1:8125/dashboard/login?t=rdl_...", r.tail(1, null, 0, 0).get(0).message());
+    }
+
+    @Test
     void minLevelDropsAtAddAndFiltersAtRead() {
         LogRing r = new LogRing(10);
         r.add(1, Level.FINE, "x", "fine", Level.INFO);

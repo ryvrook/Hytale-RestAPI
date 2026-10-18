@@ -14,7 +14,12 @@ import java.util.function.BiConsumer;
 
 /**
  * The request pipeline in front of every handler, free of the JDK server so tests drive it whole. In order:
- * base path, CORS preflight, client address, key, failed login limit, per key limit, route, scope, handler, audit.
+ * base path, CORS preflight, client address, key or session, failed login limit, per key limit, route, scope,
+ * handler, audit.
+ *
+ * <p>A second source of credentials, the dashboard session cookie, plugs in through {@link Credentials}. It is
+ * read only when the request carries no key, is refused with 403 on any request that does not come from a page of
+ * this server, and may only GET while its writes are off.
  *
  * <p>A request without a valid key learns nothing about which paths exist. It gets 401 for every path except
  * the open ones, and an address that keeps sending wrong keys gets 429 after limits.authFailuresPerMinute.
@@ -31,6 +36,7 @@ public final class Gate {
     private volatile AddressRanges proxies = AddressRanges.NONE;
     private volatile List<String> proxiesSource = List.of();
     private volatile Observer observer;
+    private volatile Credentials credentials;
 
     /** Told about every answer and every request turned away for its key, for the request counts in /metrics. */
     public interface Observer {
@@ -38,6 +44,24 @@ public final class Gate {
         void answered(String method, String pattern, int status);
 
         void authFailed();
+    }
+
+    /**
+     * Credentials besides keys, such as the dashboard session cookie. The gate asks only when the request has no
+     * key, so a key in the same request always wins.
+     */
+    public interface Credentials {
+        /** What the request carries. {@link Found#NONE} when it carries nothing of this kind. */
+        Found find(Request req);
+
+        /**
+         * @param present true when the request carries the credential at all, valid or not
+         * @param key     the key it stands for, null when it is unknown or expired
+         * @param writes  false when it may only GET and HEAD
+         */
+        record Found(boolean present, ApiKey key, boolean writes) {
+            public static final Found NONE = new Found(false, null, false);
+        }
     }
 
     public Gate(Router router, KeyStore keys, AuditSink audit, Clock clock, RateLimiter keyLimiter,
@@ -58,6 +82,23 @@ public final class Gate {
     /** Sets the observer, or clears it with null. */
     public void observe(Observer o) {
         observer = o;
+    }
+
+    /** Sets the second source of credentials, or clears it with null. */
+    public void credentials(Credentials c) {
+        credentials = c;
+    }
+
+    /**
+     * Counts a failed login that did not come through a key, such as a dashboard login link that is used or
+     * expired, against the same address limit as a wrong key. Returns the seconds to wait, 0 while tries are left.
+     */
+    public long authFailure(String client) {
+        Observer o = observer;
+        if (o != null) {
+            o.authFailed();
+        }
+        return failLimiter.acquire(client, CoreSettings.LIMITS_AUTH_FAILURES.get());
     }
 
     public Response handle(Request req) {
@@ -103,6 +144,31 @@ public final class Gate {
         String token = tokenOf(req);
         ApiKey key = token == null ? null : keys.authenticate(token);
         boolean open = found != null && found.open().getAsBoolean();
+        Credentials creds = credentials;
+        Credentials.Found session = token == null && creds != null ? creds.find(req) : Credentials.Found.NONE;
+        if (session.present()) {
+            if (!sameSite(req)) {
+                if (CoreSettings.AUDIT_AUTH_FAILURES.get()) {
+                    audit.record(new AuditEntry(clock.instant().toString(), "http",
+                            session.key() == null ? "unknown" : session.key().name(), client,
+                            req.method() + " " + path, 403, "session cookie on a request from another site"));
+                }
+                return Response.error(403, "cross_site", "The dashboard session is only taken from pages of this server");
+            }
+            key = session.key();
+            if (key == null && !open) {
+                Observer o = observer;
+                if (o != null) {
+                    o.authFailed();
+                }
+                long wait = failLimiter.acquire(client, CoreSettings.LIMITS_AUTH_FAILURES.get());
+                if (wait > 0) {
+                    return Response.error(429, "too_many_failures", "Too many requests without a valid key")
+                            .with("Retry-After", Long.toString(wait));
+                }
+                return Response.error(401, "login_required", "The dashboard session has ended, log in again");
+            }
+        }
 
         if (key == null && (token != null || !open)) {
             Observer o = observer;
@@ -134,6 +200,11 @@ public final class Gate {
                 return Response.error(429, "rate_limited", "This key is over " + limit + " requests a minute")
                         .with("Retry-After", Long.toString(wait));
             }
+        }
+        if (key != null && session.key() == key && !session.writes() && !open
+                && !req.method().equals("GET") && !req.method().equals("HEAD")) {
+            return Response.error(403, "read_only",
+                    "The dashboard is read only. Turn writes on with /restapi dashboard writes on");
         }
         if (match instanceof Router.WrongMethod w) {
             return Response.error(405, "method_not_allowed", "Use " + String.join(" or ", w.allowed()))
@@ -180,6 +251,50 @@ public final class Gate {
             return x == null || x.isBlank() ? null : x.trim();
         }
         return null;
+    }
+
+    /**
+     * True when a browser says the request comes from a page of this server. A Sec-Fetch-Site of same-origin or
+     * none decides when the browser sends one. Without it, the host of Origin, else of Referer, must be the Host
+     * header. A request with none of the three is not taken as same site.
+     */
+    static boolean sameSite(Request req) {
+        String fetchSite = req.header("sec-fetch-site");
+        if (fetchSite != null) {
+            String s = fetchSite.trim().toLowerCase(java.util.Locale.ROOT);
+            return s.equals("same-origin") || s.equals("none");
+        }
+        String host = req.header("host");
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        String origin = req.header("origin");
+        String from = origin != null ? origin : req.header("referer");
+        if (from == null) {
+            return false;
+        }
+        try {
+            java.net.URI u = new java.net.URI(from.trim());
+            String authority = u.getRawAuthority();
+            return authority != null && (u.getScheme() != null)
+                    && authority.equalsIgnoreCase(host.trim());
+        } catch (java.net.URISyntaxException e) {
+            return false;
+        }
+    }
+
+    /** True when a trusted proxy says in X-Forwarded-Proto that the browser reached it over https. */
+    public boolean forwardedHttps(Request req) {
+        List<String> trusted = CoreSettings.HTTP_TRUSTED_PROXIES.get();
+        if (trusted != proxiesSource) {
+            proxies = AddressRanges.parse(trusted);
+            proxiesSource = trusted;
+        }
+        if (proxies.isEmpty() || req.peer() == null || !proxies.contains(req.peer())) {
+            return false;
+        }
+        String proto = req.header("x-forwarded-proto");
+        return proto != null && proto.split(",")[0].trim().equalsIgnoreCase("https");
     }
 
     /** The path without the base path, or null when the request is outside it. */
@@ -244,8 +359,9 @@ public final class Gate {
         return r.with("Access-Control-Allow-Origin", origin).with("Vary", "Origin");
     }
 
-    /** Headers every answer carries. */
+    /** Headers every answer carries. A handler that set its own Cache-Control, such as a game icon, keeps it. */
     private static Response secure(Response r, Request req) {
-        return r.with("Cache-Control", "no-store").with("X-Content-Type-Options", "nosniff");
+        Response out = r.headers().containsKey("Cache-Control") ? r : r.with("Cache-Control", "no-store");
+        return out.with("X-Content-Type-Options", "nosniff");
     }
 }

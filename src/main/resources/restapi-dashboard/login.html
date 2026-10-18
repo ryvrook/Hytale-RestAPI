@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-view="lively">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="robots" content="noindex">
+  <title>Log in · RestAPI dashboard</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="img/restapi-32.png">
+  <link rel="apple-touch-icon" href="img/restapi-180.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/login.js"></script>
+</head>
+<body class="login-page">
+  <main id="main" class="login-main">
+    <section class="card login-card">
+      <header>
+        <div><h2 class="login-brand"><img src="img/restapi-64.png" width="26" height="26" alt=""><span>RestAPI dashboard</span></h2></div>
+        <div class="actions"><span class="badge warn">Login link required</span></div>
+      </header>
+      <div class="body">
+        <p class="set-text">RestAPI serves this dashboard and opens it with a login link. Run <code>/restapi dashboard login</code> in the game or the console and open the link it prints.</p>
+        <p class="set-text faint">Each link works once and for a few minutes. It logs in this browser only.</p>
+        <p class="login-msg empty-msg" id="login-msg" role="alert"></p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

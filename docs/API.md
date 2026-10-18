@@ -84,7 +84,8 @@ named after it.
 The deny list is checked before the engine sees the line. It matches on the words after aliases are resolved
 through the engine's command tree, so `/stop`, `STOP` and `shutdown` are the same command, and `pl r X` is
 `plugin reload X`. These are refused whatever the settings say: `stop` and `shutdown`, any `plugin` command
-that names `Ryvrook:RestAPI`, `restapi reload`, `restapi keys`, and `sudo` or `su` around any refused command.
+that names `Ryvrook:RestAPI`, `restapi reload`, `restapi keys`, `restapi dashboard`, and `sudo` or `su` around any
+refused command.
 Stopping the server over the API goes through `POST /api/server/stop` instead. Commands only answer from the
 addresses in `commands.allowFrom`, loopback by default, on top of the key's own `allowFrom`. Behind a reverse
 proxy that is the real client address, so remote command calls need it widened on purpose.
@@ -355,6 +356,89 @@ before it loads.
 | `GET /openapi.json` | none while `docs.public` is on, else `read` | The OpenAPI 3.1 document of the routes mounted now |
 | `GET /docs` | none | The docs page. Gone while `docs.page` is off |
 | `GET /docs/{file}` | none | `docs.js` and `docs.css` of the page, anything else is 404 `file_not_found` |
+
+## Dashboard
+
+The admin dashboard is served on RestAPI's own listener under `/dashboard/`, after `http.basePath` when that is
+set, and only while `dashboard.enabled` is on. `/restapi dashboard on` and `off` mount and remove the group
+`dashboard` without a reload. While it is off no route below exists, and a request for one gets the same 401 as
+any unknown path.
+
+| Method and path | Scope | What it answers |
+|---|---|---|
+| `GET /dashboard` | none | 308 to `dashboard/`, so the page's relative links resolve under the folder |
+| `GET /dashboard/` | none | `index.html` of the page |
+| `GET /dashboard/{file...}` | none | A file the page lists in `files.txt` (css, js, img, vendor and `login.html`), anything else 404 `file_not_found` |
+| `GET /dashboard/capabilities` | none | `{"auth":"session"}` without a session, else the facts below |
+| `GET /dashboard/login` | none | With `?t=<token>` a 303 to `./` that sets the session cookie, or a 303 to `login?link=used` (or `wait` after too many) when the token is used, unknown or expired. Without a token the login page, or a 303 to `./` for a browser that has a session |
+| `POST /dashboard/logout` | none | Ends the session of the cookie, clears the cookie, `{"ok":true,"auth":"session"}` |
+| `GET /dashboard/assets/index.json` | session or `read` | `{"items":[...],"markers":[...],"models":[...]}`, the icon names in Assets.zip, gzipped when the browser takes it |
+| `GET /dashboard/assets/{kind}/{name}.png` | session or `read` | One icon, kind `items`, `markers` or `models`. 404 `no_assets` without an archive, `not_found` for any other name |
+| `GET /dashboard/chronicle/api/avatar/{player}` | session or `read` | Chronicle Stats' `api/avatar` for a UUID or a name |
+| `GET /dashboard/chronicle/api/asset/{path...}` | session or `read` | Chronicle Stats' `api/asset` for a character file |
+
+The capabilities with a session carry `auth` `"session"`, `session` true, `mode` `"live"`, `writes`, `assets` (an
+archive is open), `chronicle` (the pass through would reach Chronicle), `upstream` (the API root as a browser
+reaches it, `docs.serverUrl` when set), `listen` and `port` of the HTTP API, `remote` (a bind beyond loopback),
+`publicUrl` (the page under `docs.serverUrl`, or null), `who` (who made the login link), `sessionEnds`, `restapi`
+and `dashboard` (the page version the jar carries).
+
+### Sessions
+
+`/restapi dashboard login` makes a token of 32 random bytes, written `rdl_` and 43 characters, that works once
+within `dashboard.linkMinutes`. The link is `<docs.serverUrl or http://<http.bind>:<http.port><http.basePath>>/dashboard/login?t=<token>`,
+with a wildcard bind written as 127.0.0.1. RestAPI keeps only the SHA-256 of the token. A token that is used,
+unknown or expired counts against `limits.authFailuresPerMinute` for the address like a wrong key, and is audited
+as `dashboard login` with the reason under `audit.logAuthFailures`.
+
+Using the token opens a session with a cookie value of another 32 random bytes, kept as its SHA-256 only, in
+memory. The cookie is `restapi_session`, `HttpOnly`, `SameSite=Strict`, `Path` set to `http.basePath` (or `/`),
+`Max-Age` seven days, and `Secure` when a proxy in `http.trustedProxies` sent `X-Forwarded-Proto: https`. A
+session ends after `dashboard.sessionHours` without a request, after seven days in any case, at logout, with
+`/restapi dashboard logout`, when the page is turned off and when the server stops. `/restapi reload` keeps it.
+
+The gate reads the cookie only when the request carries no key, so a key always wins. It takes it only from a
+page of this server, a `Sec-Fetch-Site` of `same-origin` or `none`, or without that header an `Origin`, else a
+`Referer`, whose host and port are the `Host` header. Any other request that carries the cookie gets 403
+`cross_site`, a GET too. An ended or unknown session on a route that needs a key answers 401 `login_required`,
+which sends the page to its login view, and counts like a request without a key. The session stands for a key
+named `dashboard:<who>` with every scope and `dashboard.requestsPerMinute` as its own limit, and that name is
+what the audit log and the command routes see. While `dashboard.writes` is off any method but GET and HEAD
+answers 403 `read_only`, logout aside.
+
+### The page
+
+Every HTML answer carries
+
+```
+Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' <Atlas>;
+  font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+Referrer-Policy: same-origin
+X-Frame-Options: DENY
+```
+
+where `<Atlas>` is the origin of Atlas' `publicUrl` and of its own bind and port from `atlas.json` while Atlas is
+bound, for the mini map tiles, and nothing otherwise. The page has no inline script, no style element and no
+style attribute, and sets chart geometry through `element.style`, which that policy allows. Page files are
+answered with `Cache-Control: no-store` like the docs page. Icons carry `ETag` from the entry's CRC and
+`Cache-Control: public` with a day for the index and a week for an icon. Chronicle files keep Chronicle's rule,
+a minute for an avatar and a month for an asset.
+
+### Game icons and character pictures
+
+The index of Assets.zip is built once when the page starts, from the zip's central directory, keeping the PNG
+entries directly in `Common/Icons/ItemsGenerated/`, `Common/UI/WorldMap/MapMarkers/` and
+`Common/Icons/ModelsGenerated/` whose names are letters, digits, underscores and dashes. Each icon is read on its
+own when asked for. A name with a separator, a dot or a percent escape is refused before the archive is asked.
+`dashboard.assets` names the archive, relative to the server folder. Empty takes the base pack the engine loaded
+when that is a zip, else `Assets.zip` in the server folder, else in the folder above it.
+
+The Chronicle Stats pass through works while Chronicle Stats is bound and `dashboard.chronicle` is on. It reads
+`webEnabled`, `bind`, `port` and `basePath` from Chronicle's `chronicle.json` and asks
+`http://<bind, 127.0.0.1 for a wildcard>:<port><basePath>/api/avatar/...` and `/api/asset/...`, GET only, with
+no cookie, so Chronicle answers as it does to any visitor. Asset files are kept for good once read, avatar
+answers for a minute and then asked again with `If-None-Match`. At most 16 MB is kept. An asset path needs two
+segments or more and may hold no dot segment and no escaped slash, backslash, dot or null. Anything else is 404.
 
 ## RCON
 

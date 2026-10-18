@@ -1,5 +1,6 @@
 package dev.ryvrook.restapi;
 
+import com.hypixel.hytale.server.core.Message;
 import dev.ryvrook.restapi.http.Route;
 
 import java.util.List;
@@ -42,6 +43,15 @@ public interface RestModule {
      * nothing under that topic.
      */
     default List<String> lines(String topic) {
+        return List.of();
+    }
+
+    /**
+     * Answers {@code /restapi <group> <topic>} for a sub command that changes something, such as dashboard on.
+     * Runs on RestAPI's scheduler under the plugin's lock. remount stops the module, mounts its routes again and
+     * starts it, without a full reload. by is who ran the command. Empty when the module has no such topic.
+     */
+    default List<Message> act(String topic, String by, Runnable remount) {
         return List.of();
     }
 }

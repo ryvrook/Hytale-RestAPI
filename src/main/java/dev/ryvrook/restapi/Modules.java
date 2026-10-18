@@ -20,6 +20,7 @@ public final class Modules {
             "dev.ryvrook.restapi.control.ControlModule",
             "dev.ryvrook.restapi.events.EventsModule",
             "dev.ryvrook.restapi.docs.DocsModule",
+            "dev.ryvrook.restapi.dashboard.DashboardModule",
             "dev.ryvrook.restapi.rcon.RconModule",
             "dev.ryvrook.restapi.suite.SuiteModule");
 

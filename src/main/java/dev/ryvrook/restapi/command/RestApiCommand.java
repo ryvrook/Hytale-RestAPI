@@ -8,6 +8,7 @@ import com.hypixel.hytale.server.core.command.system.arguments.types.ArgTypes;
 import com.hypixel.hytale.server.core.command.system.basecommands.AbstractCommandCollection;
 import com.hypixel.hytale.server.core.command.system.basecommands.CommandBase;
 import dev.ryvrook.restapi.RestApiPlugin;
+import dev.ryvrook.restapi.dashboard.DashboardText;
 import dev.ryvrook.restapi.text.Messages;
 
 import java.util.List;
@@ -16,7 +17,8 @@ import java.util.concurrent.CompletableFuture;
 import static dev.ryvrook.restapi.text.CommandText.*;
 
 /**
- * {@code /restapi status|reload|keys list|keys create <name> <scopes>|keys revoke <name>|audit tail [--lines n]|rcon status|webhooks list}.
+ * {@code /restapi status|reload|keys list|keys create <name> <scopes>|keys revoke <name>|audit tail [--lines n]|rcon status|webhooks list}
+ * and {@code /restapi dashboard on|off|status|login|logout|writes on|writes off}.
  * Every node needs restapi.admin, the key nodes restapi.admin.keys as well, and all of them work from the console.
  * Anything that touches a file runs on RestAPI's scheduler and the reply comes back on the sender's world thread.
  */
@@ -33,6 +35,32 @@ public final class RestApiCommand extends AbstractCommandCollection {
                 ctx -> plugin.moduleLines("rcon", "status"))));
         addSubCommand(new Group("webhooks", WEBHOOKS, new Leaf("list", WEBHOOKS_LIST, Perms.ADMIN,
                 ctx -> plugin.moduleLines("events", "webhooks"))));
+        addSubCommand(new Dashboard(plugin));
+    }
+
+    /** /restapi dashboard, answered by the dashboard module. Every leaf writes an audit line. */
+    static final class Dashboard extends AbstractCommandCollection {
+        Dashboard(RestApiPlugin plugin) {
+            super("dashboard", Messages.get(DashboardText.COMMAND));
+            requirePermission(Perms.ADMIN);
+            for (String[] leaf : new String[][]{{"on", DashboardText.COMMAND_ON}, {"off", DashboardText.COMMAND_OFF},
+                    {"status", DashboardText.COMMAND_STATUS}, {"login", DashboardText.COMMAND_LOGIN},
+                    {"logout", DashboardText.COMMAND_LOGOUT}}) {
+                addSubCommand(new Leaf(leaf[0], leaf[1], Perms.ADMIN, ctx -> plugin.moduleAct("dashboard", leaf[0], who(ctx))));
+            }
+            addSubCommand(new Writes(plugin));
+        }
+    }
+
+    static final class Writes extends AbstractCommandCollection {
+        Writes(RestApiPlugin plugin) {
+            super("writes", Messages.get(DashboardText.COMMAND_WRITES));
+            requirePermission(Perms.ADMIN);
+            addSubCommand(new Leaf("on", DashboardText.COMMAND_WRITES_ON, Perms.ADMIN,
+                    ctx -> plugin.moduleAct("dashboard", "writes on", who(ctx))));
+            addSubCommand(new Leaf("off", DashboardText.COMMAND_WRITES_OFF, Perms.ADMIN,
+                    ctx -> plugin.moduleAct("dashboard", "writes off", who(ctx))));
+        }
     }
 
     /** A sub command group holding one leaf, such as rcon status. */

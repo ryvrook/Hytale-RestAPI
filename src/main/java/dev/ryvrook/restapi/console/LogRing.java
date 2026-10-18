@@ -24,6 +24,8 @@ public final class LogRing {
     public static final String RAW = "RAW";
     private static final Pattern ANSI = Pattern.compile("\u001b\\[[;\\d]*[A-Za-z]");
     private static final Pattern TOKEN = Pattern.compile("rapi_([0-9a-f]{8})_[A-Za-z0-9_-]{43}");
+    /** A dashboard login link token, cut to {@code rdl_...}, see dev.ryvrook.restapi.dashboard.SessionStore. */
+    private static final Pattern LINK = Pattern.compile("rdl_[A-Za-z0-9_-]{43}");
     private static final List<Level> NAMED = List.of(Level.SEVERE, Level.WARNING, Level.INFO, Level.CONFIG,
             Level.FINE, Level.FINER, Level.FINEST);
 
@@ -63,7 +65,7 @@ public final class LogRing {
         }
     }
 
-    /** ANSI codes out, key tokens cut to {@code rapi_<id>_...}. */
+    /** ANSI codes out, key tokens cut to {@code rapi_<id>_...} and dashboard login tokens to {@code rdl_...}. */
     static String clean(String message) {
         String t = message == null ? "" : message;
         if (t.indexOf('\u001b') >= 0) {
@@ -71,6 +73,9 @@ public final class LogRing {
         }
         if (t.contains("rapi_")) {
             t = TOKEN.matcher(t).replaceAll("rapi_$1_...");
+        }
+        if (t.contains("rdl_")) {
+            t = LINK.matcher(t).replaceAll("rdl_...");
         }
         return t;
     }

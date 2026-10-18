@@ -3,6 +3,36 @@
 Every notable change to RestAPI is recorded here. The format follows Keep a Changelog and the project uses
 semantic versioning.
 
+## 0.3.0 - 2026-10-18
+
+The admin dashboard, served from inside the mod. The page is dashboard 1.6.0 from
+github.com/ryvrook/restapi-dashboard, carried in the jar.
+
+### Added
+
+- Dashboard module. The page and its files at `/dashboard/` on the HTTP API's own listener, under
+  `http.basePath`, mounted only while `dashboard.enabled` is on. 9 routes, 7 `dashboard.*` settings.
+- `/restapi dashboard on`, `off`, `status`, `login`, `logout`, `writes on` and `writes off`. On and off mount and
+  remove the routes without a reload and write the setting to `RestAPI.json`. Every one writes an audit line.
+- Login links that work once within `dashboard.linkMinutes` and open a session in memory. The cookie is
+  HttpOnly, SameSite Strict, scoped to the base path and Secure behind a trusted proxy on https. Sessions end
+  after `dashboard.sessionHours` without use, after 7 days, at logout, when the page is turned off and at a server
+  stop, and live through `/restapi reload`.
+- Sessions as credentials in the gate, only on requests from the dashboard's own pages, 403 `cross_site` for any
+  other request that carries the cookie. A session acts as `dashboard:<who>`, may only read while
+  `dashboard.writes` is off, and has its own request limit. A key in the same request wins.
+- Game icons from the server's Assets.zip, read entry by entry with an index built at start, and the Chronicle
+  Stats character pictures passed through over loopback on Chronicle's own port.
+- A Content Security Policy on the page that lets it reach this server only, plus Atlas for the mini map tiles.
+- `/restapi status` has a dashboard line.
+
+### Changed
+
+- `/restapi dashboard` is on the fixed deny list of `POST /api/commands` and RCON, so a key with the `commands`
+  scope cannot make itself a login link. The console log ring cuts login tokens to `rdl_...`.
+- A route may end in a `{name...}` segment that takes the rest of the path. OpenAPI writes it as `{name}`.
+- An answer keeps a `Cache-Control` its route set. Every other answer still gets `no-store`.
+
 ## 0.2.1 - 2026-10-18
 
 - The mod menu icon is in the jar now.

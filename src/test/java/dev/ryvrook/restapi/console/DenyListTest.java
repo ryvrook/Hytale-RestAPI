@@ -56,6 +56,8 @@ class DenyListTest {
     void restApiReloadAndKeysAreRefused() {
         assertEquals("restapi reload", deny.match("restapi reload", List.of()));
         assertEquals("restapi keys", deny.match("/restapi keys create root all", List.of()));
+        assertEquals("restapi dashboard", deny.match("restapi dashboard login", List.of()));
+        assertEquals("restapi dashboard", deny.match("sudo Steve restapi DASHBOARD writes on", List.of()));
         assertNull(deny.match("restapi status", List.of()));
     }
 

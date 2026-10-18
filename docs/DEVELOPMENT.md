@@ -38,6 +38,7 @@ in `build.gradle.kts` and reaches the manifest through `processResources`.
 | `control` | Plugins, worlds, server config, backups and the stop, see "Control module" |
 | `events` | The event ring and stream, webhooks and `/metrics`, see "Events module" |
 | `docs` | `OpenApi` (the document from `Router.routes()`), `DocsRoutes` and the page under `src/main/resources/restapi-docs/` |
+| `dashboard` | The admin dashboard, its sessions and login links, the Assets.zip reader and the Chronicle Stats pass through, see "Dashboard module" |
 | `rcon` | The Source RCON listener, see "RCON module" |
 
 Each module has a package of its own and is listed by class name in `Modules.CLASSES`, so a build with
@@ -71,15 +72,19 @@ logs one INFO line naming the value in use when the property holds a different n
 3. Client address. The peer, unless the peer is in `http.trustedProxies`, then `X-Forwarded-For` is walked
    from the right to the first hop that is not a trusted proxy. A hop that is not an IP literal stops the walk.
 4. Key. `Authorization: Bearer`, else `X-API-Key` when `keys.acceptXApiKey` is on. The id in the token picks
-   the key, the SHA-256 is compared with `MessageDigest.isEqual`.
+   the key, the SHA-256 is compared with `MessageDigest.isEqual`. Without a key the `Gate.Credentials` set by the
+   dashboard module are asked, see "Dashboard module". A request that carries the session cookie and does not come
+   from a page of this server is 403 `cross_site` here, before anything else.
 5. No valid key on a route that is not open, or a wrong key anywhere: the address limiter
    (`limits.authFailuresPerMinute`) and 401 with `WWW-Authenticate`. The answer is the same for paths that exist
    and paths that do not. A wrong key is audited.
 6. `allowFrom` of the key, else 403.
 7. Per key token bucket, `requestsPerMinute` of the key or `limits.requestsPerMinute`, else 429 with
    `Retry-After`.
-8. Route match. 404, or 405 with `Allow`. A literal segment beats a `{param}` segment at the same place. HEAD is
-   answered by the GET route.
+8. A dashboard session without `dashboard.writes` asking with any method but GET or HEAD on a route that is not
+   open: 403 `read_only`. Then the route match. 404, or 405 with `Allow`. A literal segment beats a `{param}`
+   segment at the same place. A last segment `{name...}` takes the rest of the path, one segment or more, and
+   loses to every pattern of fixed length. HEAD is answered by the GET route.
 9. Scope, else 403 `missing_scope`, audited.
 10. Handler. `ApiException` becomes its status and code. Anything else becomes 500 `internal_error` with no
     exception text, and the cause goes to the server log. That includes `AssertionError`, which the engine's
@@ -88,7 +93,8 @@ logs one INFO line naming the value in use when the property holds a different n
 12. The observer, when the events module runs, gets the method, the matched pattern (null when none matched)
     and the status of every answer, and a call for each request turned away in step 5.
 
-Every answer carries `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
+Every answer carries `X-Content-Type-Options: nosniff`, and `Cache-Control: no-store` unless its route set a
+`Cache-Control` of its own, as the dashboard's game icons and Chronicle files do.
 
 A handler that answers `Response.stream(stream)` gets Server Sent Events. `HttpHost` gives back the in flight
 slot, takes one of `http.maxStreams` stream slots or answers 503, sends the headers with
@@ -110,6 +116,7 @@ Settings docs are one file per section under `docs/settings/`, written by the te
 | `RestAPI-command-<run id>`, virtual | Waits for one command run, its grace window and the audit lines |
 | `RestAPI-webhook-<id>`, virtual | One per webhook, delivers its queue in order |
 | `RestAPI-rcon-accept` and `RestAPI-rcon-<n>`, virtual | The RCON accept loop and one per connection |
+| `HttpClient-<n>-SelectorManager` | The JDK client of the dashboard's Chronicle Stats pass through, made on the first bust request and stopped with `shutdownNow` when the module stops |
 | `RestAPI-relink` | A daemon platform thread, only after a reload of an older sibling without a dependents pass. Waits three seconds and reloads RestAPI under the suite lock |
 | `RestAPI-stop` | A platform thread that is not a daemon. Counts down a stop and calls `shutdownServer`, since the plugin's shutdown stops the scheduler |
 | Logger threads | `LogTap.add` and the events module's command tap copy a line and return |
@@ -795,6 +802,142 @@ nothing is subscribed with 0. The subscription is closed in `unbind` and in the 
   service, and `post(channel, Announcement)`. A post with a title or footer becomes an embed, text is cut at 2000
   characters and titles at 256, and false from `post` (no service running or the channel off) answers 409
   `not_posted`. SocialBridge files the post under the kind `api.<kind>`.
+
+### Dashboard module
+
+Package `dev.ryvrook.restapi.dashboard`, group `dashboard`, 9 routes while `dashboard.enabled` is on and none
+while it is off. The page files are a copy of github.com/ryvrook/restapi-dashboard under
+`src/main/resources/restapi-dashboard/`.
+
+#### Classes
+
+| Class | What it does |
+|---|---|
+| `DashboardModule` | Mounts the routes while the page is on, opens Assets.zip and sets the gate's credentials in `start`, takes both back in `stop`, answers `/restapi dashboard` through `act` and the status line |
+| `DashboardRoutes` | The page, its files, capabilities, login, logout, the icons and the two Chronicle routes, the Content Security Policy |
+| `DashboardSettings`, `DashboardText` | Section `dashboard` and the `dashboard.*`, `command.dashboard.*` and `status.dashboard.*` ids |
+| `SessionStore`, `Session`, `LoginLink` | Login links and sessions in memory by SHA-256, and the `Gate.Credentials` the gate asks |
+| `PageFiles` | The page files from the jar, listed by `files.txt`, with the version and commit from `VERSION` |
+| `AssetZip` | Assets.zip through `java.util.zip.ZipFile`, the index of the three icon folders and the entry reads |
+| `ChroniclePass` | The pass through to Chronicle Stats, its small cache and the JDK client |
+
+#### The session credential
+
+`Gate.Credentials` is a second source of credentials next to keys, with one method `find(Request)` that answers
+whether the request carries the credential, the key it stands for (null when unknown or expired) and whether it
+may write. The dashboard module sets the `SessionStore` in `start` and clears it in `stop`, so it is asked only
+while the page is on. The gate asks only when the request has no key, so a key always wins, and does this.
+
+- The cookie is there but the request is not same site: 403 `cross_site`, audited under `audit.logAuthFailures`
+  with the session's name when it was valid. Same site is `Sec-Fetch-Site` `same-origin` or `none` when the
+  browser sends it, else the host and port of `Origin`, else of `Referer`, equal to `Host`. `same-site` is
+  refused on purpose, another port of the same host is another origin.
+- The cookie is there but unknown or ended, on a route that is not open: 401 `login_required` after the failed
+  login limiter, like a request without a key. The page goes to its login view on that code.
+- A valid session becomes the key: `dashboard:<who>`, id `s<8 hex digits>` for the per key limiter, every scope,
+  `dashboard.requestsPerMinute` as its limit, no `allowFrom`. Handlers see it as `call.key()`, so the audit log,
+  the command sender (`RestAPI:dashboard:<who>`) and a Coinage initiator name it.
+- Without `dashboard.writes` the key may only GET and HEAD on routes that are not open. Logout is open, so it
+  works while read only.
+
+The store keeps sessions and links by the SHA-256 of their value, never the value. It lives as long as the
+module object, which is the plugin's, so `/restapi reload` (stop, routes, start) keeps sessions. `routes` ends
+them all when it finds the page off, which covers `/restapi dashboard off` and a reload with the page turned off
+in the file. At most 64 sessions and 32 links are kept, the oldest go first. Login tokens are `rdl_` and 43
+characters so `LogRing.clean` cuts them like key tokens, and `restapi dashboard` is a fixed deny list entry, so
+neither the command routes nor RCON can make a link.
+
+The login route counts a used, unknown or expired token through `Gate.authFailure(client)`, the same limiter and
+observer as a wrong key, and answers 303 to `login?link=used` or `login?link=wait`, which `login.html` turns into a
+sentence. A good token answers 303 to `./` with `Set-Cookie`, Path the base path or `/`, Secure when
+`Gate.forwardedHttps` sees `X-Forwarded-Proto: https` from a trusted proxy.
+
+`/restapi dashboard on`, `off`, `writes on` and `writes off` write the one key with `Settings.persist`, which reads
+`RestAPI.json`, sets the key, writes through a temporary file and a move and swaps the value in memory. On and off
+then call the `remount` the plugin hands to `RestModule.act`, which stops the module, mounts its routes again and
+starts it, under the plugin's lock, without touching any other module.
+
+#### The page files and the sync script
+
+The dashboard repository is the source of the page. `tools/sync-to-restapi.sh [path to this checkout]` there
+copies `index.html`, `login.html`, `css/`, `js/`, `img/` and `vendor/` into `src/main/resources/restapi-dashboard/`,
+replacing what was there, and writes `files.txt` (every file the mod serves, sorted) and `VERSION`
+(`dashboard <version>` from `js/app.js` and `commit <short hash>`, with `+changes` when the checkout had changes
+in those folders). Run it after a change there and commit the copy here, the mod builds without the other
+checkout. `PageFiles` serves nothing that `files.txt` does not list and refuses a listed path that is not plain
+segments of letters, digits, dots, dashes and underscores. The copy is about 680 KB.
+
+The page computes its root from its own address, everything before `/dashboard/`, so it works under
+`http.basePath` and behind a proxy that serves RestAPI under a sub path. `/dashboard` without the slash answers
+308 to `dashboard/` so relative links resolve.
+
+#### Content Security Policy
+
+`default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' <Atlas>; font-src 'self';
+connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. The page
+has no inline script, style element or style attribute. Chart geometry, swatches and the mini map go through
+`element.style`, which a `style-src` without `unsafe-inline` allows, and the chart SVG strings carry presentation
+attributes only. The page uses no data URL and no blob URL for images. The settings export is a download of a blob
+link, which the policy does not govern. `<Atlas>` is the origin of `publicUrl` and of `bind` and `port` from
+`atlas.json` while Atlas is bound, read through `JsonFile`, and nothing otherwise. Checked in Chrome with the
+browser check below, no CSP report on any step.
+
+#### Assets.zip and Chronicle Stats
+
+`ZipFile` reads the central directory when it opens and keeps it, and `getInputStream(entry)` reads one entry,
+so the 3.9 GB archive is never read whole. The index keeps the `ZipEntry` of every PNG directly in the three
+folders, names of `[A-Za-z0-9_-]{1,100}`, and the body of `index.json` plain and gzipped. The icon ETag is the
+entry's CRC in hex. The client's archive held 4824 such icons when server.js read it on 2026-10-18.
+
+The Chronicle base is `http://<bind, 127.0.0.1 for a wildcard>:<port><basePath>/` from `chronicle.json` in
+Chronicle's data folder (`Folders.of`), only while `suite.chronicle` is mounted, `dashboard.chronicle` is on and
+`webEnabled` is not false. The file is read through `JsonFile`, so a changed port applies on the next request. The
+requests carry no cookie and come from 127.0.0.1, so Chronicle answers as to a visitor without a browser link and
+counts all dashboard requests against one address in its own limiter, 240 avatars and 1800 files a minute.
+
+#### Engine facts, read with javap on Server-0.7.1.jar
+
+- `Message.link(String)` sets `FormattedMessage.link`. The login link line is `Message.raw(url).link(url)`. Whether
+  the 0.7.2 client opens it on a click was not checked, the text is the whole URL either way.
+- `AssetModule.get().getBaseAssetPack().getPackLocation()` is where the engine loaded its base pack from, an
+  `AssetPack` with `getRoot()`, `getPackLocation()` and `getFileSystem()`. `dashboard.assets` empty tries it first
+  when it ends in `.zip`, then `Assets.zip` in `Path.of("")`, the server's working directory, then its parent.
+- `Options.getOptionSet()` with `Options.ASSET_DIRECTORY` holds `--assets`. RestAPI does not read it, the base
+  pack location already is that path.
+- `CommandContext.sendMessage` goes to the sender alone, so the link never reaches broadcast chat. From the
+  console it is a log line, the only place a token is shown, and `LogRing` cuts it in the console stream.
+
+#### Browser check
+
+`DashboardBrowserCheck` is a JUnit test that runs only with `RESTAPI_BROWSER_CHECK=1`. It starts `HttpHost` with the
+gate, the dashboard module with a small Assets.zip of real PNG files, and a stub router that answers
+`/api/health` and `/api/server` with fixed JSON (`src/test/resources/dashboard-check/server.json`, the dashboard's
+mock answer) and counts kicks. A second JDK server on the next port serves a page of another origin that POSTs a
+kick and GETs `/api/server` with `credentials: 'include'`. Then it runs `src/test/browser/dashboard-check.mjs`,
+which drives headless Chrome with the dashboard's `tools/cdp.mjs`, and the dashboard's `tools/layout-scan.mjs`
+over `/dashboard/login`.
+
+```
+RESTAPI_BROWSER_CHECK=1 RESTAPI_BROWSER_OUT=/tmp/shots ./gradlew test --tests dev.ryvrook.restapi.DashboardBrowserCheck --rerun
+```
+
+Ports 8310 (RestAPI), 8311 (the other origin) and 8312 (Chrome's debugging port), or `RESTAPI_BROWSER_PORT` and
+the two after it. `DASHBOARD_TOOLS` points at the dashboard's `tools/`, `../restapi-dashboard/tools` by default.
+The run on 2026-10-18 passed all 15 steps: the login link opens `/dashboard/#/overview`, the cookie is HttpOnly,
+SameSite Strict, Path `/` and not in `document.cookie`, capabilities answer the session, the header shows the
+server, health and Log out, the Lively view reads the icon index under `/dashboard/assets`, Just data and Lively
+switch both ways, Settings hides the Password card, a POST from the page answers 403 `read_only`, the POST and the
+GET from the other origin answer 403 `cross_site` and never reach the kick route, Log out lands on the login view,
+the API is closed after it, the same link a second time shows that it was used, with no exception, console error,
+failed request or CSP report. The page asks for `/api/events/recent`, `/api/server/config` and `/api/server/stop`
+on the overview, which the stub does not answer, and those 404s are listed apart. The layout scan found nothing
+on the login view at 1280, 1500, 1920 and 390 px in both views.
+
+#### Not verified
+
+- A live server. The module ran in tests and in the browser check only, not on a booted 0.7.2 server with the
+  real Assets.zip and Chronicle Stats, and not behind a real proxy on https.
+- The click on the login link in the game client.
 
 ## Headless smoke test
 
