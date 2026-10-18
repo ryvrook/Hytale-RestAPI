@@ -3,6 +3,10 @@
 Every notable change to RestAPI is recorded here. The format follows Keep a Changelog and the project uses
 semantic versioning.
 
+## 0.2.1 - 2026-10-18
+
+- The mod menu icon is in the jar now.
+
 ## 0.2.0 - 2026-10-16
 
 The first public file, with everything from 0.1.0 below. Needs the Hytale 0.7.0 release server or newer. The
