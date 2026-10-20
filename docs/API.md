@@ -398,9 +398,11 @@ session ends after `dashboard.sessionHours` without a request, after seven days 
 `/restapi dashboard logout`, when the page is turned off and when the server stops. `/restapi reload` keeps it.
 
 The gate reads the cookie only when the request carries no key, so a key always wins. It takes it only from a
-page of this server, a `Sec-Fetch-Site` of `same-origin` or `none`, or without that header an `Origin`, else a
-`Referer`, whose host and port are the `Host` header. Any other request that carries the cookie gets 403
-`cross_site`, a GET too. An ended or unknown session on a route that needs a key answers 401 `login_required`,
+page of this server, a `Sec-Fetch-Site` of `same-origin` or `none`, or a GET or HEAD that is a top level page
+navigation, `Sec-Fetch-Mode` `navigate` with `Sec-Fetch-Dest` `document`, whatever the site, since a login link
+clicked in the game client and the redirect after it do not arrive as `same-origin` in Firefox. Without those headers an
+`Origin`, else a `Referer`, whose host and port are the `Host` header. Any other request that carries the cookie
+gets 403 `cross_site`, a GET from a script, an image or a frame too. An ended or unknown session on a route that needs a key answers 401 `login_required`,
 which sends the page to its login view, and counts like a request without a key. The session stands for a key
 named `dashboard:<who>` with every scope and `dashboard.requestsPerMinute` as its own limit, and that name is
 what the audit log and the command routes see. While `dashboard.writes` is off any method but GET and HEAD

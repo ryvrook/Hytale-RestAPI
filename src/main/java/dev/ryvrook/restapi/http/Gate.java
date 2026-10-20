@@ -255,14 +255,17 @@ public final class Gate {
 
     /**
      * True when a browser says the request comes from a page of this server. A Sec-Fetch-Site of same-origin or
-     * none decides when the browser sends one. Without it, the host of Origin, else of Referer, must be the Host
-     * header. A request with none of the three is not taken as same site.
+     * none decides when the browser sends one. A GET or HEAD that is a top level page navigation, Sec-Fetch-Mode
+     * navigate with Sec-Fetch-Dest document, passes whatever the site says: a login link clicked in the game
+     * client does not arrive as same-origin in Firefox, nor does the redirect after it, while a page shown in a
+     * tab cannot be read by another site and changes nothing. Without the Sec-Fetch headers, the host of Origin,
+     * else of Referer, must be the Host header. A request with none of the three is not taken as same site.
      */
     static boolean sameSite(Request req) {
         String fetchSite = req.header("sec-fetch-site");
         if (fetchSite != null) {
             String s = fetchSite.trim().toLowerCase(java.util.Locale.ROOT);
-            return s.equals("same-origin") || s.equals("none");
+            return s.equals("same-origin") || s.equals("none") || pageNavigation(req);
         }
         String host = req.header("host");
         if (host == null || host.isBlank()) {
@@ -281,6 +284,19 @@ public final class Gate {
         } catch (java.net.URISyntaxException e) {
             return false;
         }
+    }
+
+    /** A GET or HEAD the browser makes to show a page in a tab or window, not a frame, a fetch or an image. */
+    static boolean pageNavigation(Request req) {
+        String method = req.method();
+        if (!method.equals("GET") && !method.equals("HEAD")) {
+            return false;
+        }
+        String mode = req.header("sec-fetch-mode");
+        String dest = req.header("sec-fetch-dest");
+        return mode != null && dest != null
+                && mode.trim().equalsIgnoreCase("navigate")
+                && dest.trim().equalsIgnoreCase("document");
     }
 
     /** True when a trusted proxy says in X-Forwarded-Proto that the browser reached it over https. */

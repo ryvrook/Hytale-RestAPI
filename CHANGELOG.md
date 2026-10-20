@@ -3,6 +3,15 @@
 Every notable change to RestAPI is recorded here. The format follows Keep a Changelog and the project uses
 semantic versioning.
 
+## 0.3.1 - 2026-10-20
+
+### Fixed
+
+- A login link opened from the game client ended on 403 `cross_site` in Firefox, and so did every page load
+  after it. Firefox does not send `Sec-Fetch-Site: same-origin` for a link opened by another program nor for the
+  redirect after the login. The gate now takes the session on a GET or HEAD that is a top level page navigation whatever
+  the site says. A fetch, an image or a frame from another site is still refused.
+
 ## 0.3.0 - 2026-10-18
 
 The admin dashboard, served from inside the mod. The page is dashboard 1.6.0 from

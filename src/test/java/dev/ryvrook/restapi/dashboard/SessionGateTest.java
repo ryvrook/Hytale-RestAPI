@@ -82,6 +82,43 @@ class SessionGateTest {
     }
 
     @Test
+    void aPageNavigationWithTheCookieIsTakenWhateverTheSiteSays() {
+        // A login link clicked in the game client and the redirect after it do not arrive as same-origin in Firefox.
+        for (String site : List.of("cross-site", "same-site", "same-origin", "none")) {
+            Response r = gate.handle(req("GET", "/api/server").with("Sec-Fetch-Site", site)
+                    .with("Sec-Fetch-Mode", "navigate").with("Sec-Fetch-Dest", "document"));
+            assertEquals(200, r.status(), site);
+            assertEquals("dashboard:Steve", r.bodyText(), site);
+        }
+        assertEquals(200, gate.handle(req("HEAD", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                .with("Sec-Fetch-Mode", "navigate").with("Sec-Fetch-Dest", "document")).status());
+    }
+
+    @Test
+    void onlyATopLevelGetNavigationPassesCrossSite() {
+        for (Request r : List.of(
+                req("POST", "/api/players/Steve/kick").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Mode", "navigate").with("Sec-Fetch-Dest", "document"),
+                req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Mode", "navigate").with("Sec-Fetch-Dest", "iframe"),
+                req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Mode", "navigate").with("Sec-Fetch-Dest", "frame"),
+                req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Mode", "no-cors").with("Sec-Fetch-Dest", "image"),
+                req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Mode", "cors").with("Sec-Fetch-Dest", "empty"),
+                req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Mode", "navigate"),
+                req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site")
+                        .with("Sec-Fetch-Dest", "document"))) {
+            Response res = gate.handle(r);
+            assertEquals(403, res.status(), r.toString());
+            assertTrue(res.bodyText().contains("cross_site"), r.toString());
+        }
+        assertTrue(kicked.isEmpty());
+    }
+
+    @Test
     void crossSiteRequestsWithTheCookieAre403EvenForGet() {
         for (Request r : List.of(
                 req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site"),

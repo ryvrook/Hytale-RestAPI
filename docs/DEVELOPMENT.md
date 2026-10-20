@@ -830,8 +830,11 @@ while the page is on. The gate asks only when the request has no key, so a key a
 
 - The cookie is there but the request is not same site: 403 `cross_site`, audited under `audit.logAuthFailures`
   with the session's name when it was valid. Same site is `Sec-Fetch-Site` `same-origin` or `none` when the
-  browser sends it, else the host and port of `Origin`, else of `Referer`, equal to `Host`. `same-site` is
-  refused on purpose, another port of the same host is another origin.
+  browser sends it, or a GET or HEAD with `Sec-Fetch-Mode` `navigate` and `Sec-Fetch-Dest` `document`, a page
+  shown in a tab, whatever the site says. Firefox does not send `same-origin` for a link opened from the game client
+  nor for the redirect after the login, and a page in a tab cannot be read by another site. Without the Sec-Fetch
+  headers it is the host and port of `Origin`, else of `Referer`, equal to `Host`. `same-site` on a fetch, an
+  image or a frame is refused on purpose, another port of the same host is another origin.
 - The cookie is there but unknown or ended, on a route that is not open: 401 `login_required` after the failed
   login limiter, like a request without a key. The page goes to its login view on that code.
 - A valid session becomes the key: `dashboard:<who>`, id `s<8 hex digits>` for the per key limiter, every scope,
