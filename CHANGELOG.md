@@ -3,6 +3,16 @@
 Every notable change to RestAPI is recorded here. The format follows Keep a Changelog and the project uses
 semantic versioning.
 
+## 0.3.2 - 2026-10-20
+
+### Fixed
+
+- The login link and the page still ended on 403 `cross_site` in a browser that sends neither `same-origin`
+  nor the page navigation headers for a link opened from the game client. An open route, the page, its files,
+  the login link and `/api/health`, now answers such a request as it does a stranger, with the cookie counting
+  for nothing, instead of refusing it. The session is still only taken on same site requests, which is what the
+  page's own requests are.
+
 ## 0.3.1 - 2026-10-20
 
 ### Fixed

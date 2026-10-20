@@ -146,8 +146,13 @@ public final class Gate {
         boolean open = found != null && found.open().getAsBoolean();
         Credentials creds = credentials;
         Credentials.Found session = token == null && creds != null ? creds.find(req) : Credentials.Found.NONE;
-        if (session.present()) {
-            if (!sameSite(req)) {
+        if (session.present() && !sameSite(req)) {
+            if (open) {
+                // The page, its files and the login link are served to a stranger as they are. A browser that
+                // does not call a link opened from the game client same site gets the same answer, and the
+                // cookie counts for nothing on it.
+                session = Credentials.Found.NONE;
+            } else {
                 if (CoreSettings.AUDIT_AUTH_FAILURES.get()) {
                     audit.record(new AuditEntry(clock.instant().toString(), "http",
                             session.key() == null ? "unknown" : session.key().name(), client,
@@ -155,6 +160,8 @@ public final class Gate {
                 }
                 return Response.error(403, "cross_site", "The dashboard session is only taken from pages of this server");
             }
+        }
+        if (session.present()) {
             key = session.key();
             if (key == null && !open) {
                 Observer o = observer;

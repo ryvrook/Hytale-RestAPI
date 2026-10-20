@@ -119,6 +119,23 @@ class SessionGateTest {
     }
 
     @Test
+    void anOpenRouteAnswersACrossSiteRequestAsAStrangerInsteadOfRefusingIt() {
+        // The page and the login link are open routes. A browser that does not call a link opened from the game
+        // client same site, with an old cookie on it, still gets the page, with the cookie counting for nothing.
+        for (Request r : List.of(
+                req("GET", "/api/health").with("Sec-Fetch-Site", "cross-site"),
+                req("GET", "/api/health").with("Sec-Fetch-Site", "same-site"),
+                req("GET", "/api/health"),
+                req("GET", "/api/health").with("Referer", "http://127.0.0.1:9999/x"))) {
+            Response res = gate.handle(r);
+            assertEquals(200, res.status(), r.toString());
+            assertEquals("anon", res.bodyText(), r.toString());
+        }
+        assertEquals("dashboard:Steve", gate.handle(req("GET", "/api/health").with("Sec-Fetch-Site", "same-origin")).bodyText());
+        assertTrue(audit.stream().noneMatch(e -> e.status() == 403), "nothing to audit, the answer is the public one");
+    }
+
+    @Test
     void crossSiteRequestsWithTheCookieAre403EvenForGet() {
         for (Request r : List.of(
                 req("GET", "/api/server").with("Sec-Fetch-Site", "cross-site"),
@@ -127,8 +144,7 @@ class SessionGateTest {
                 req("GET", "/api/server").with("Origin", "null"),
                 req("GET", "/api/server").with("Referer", "http://127.0.0.1:9999/x"),
                 req("GET", "/api/server"),
-                req("POST", "/api/players/Steve/kick").with("Sec-Fetch-Site", "cross-site"),
-                req("GET", "/api/health").with("Sec-Fetch-Site", "cross-site"))) {
+                req("POST", "/api/players/Steve/kick").with("Sec-Fetch-Site", "cross-site"))) {
             Response res = gate.handle(r);
             assertEquals(403, res.status(), r.toString());
             assertTrue(res.bodyText().contains("cross_site"));

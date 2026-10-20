@@ -834,7 +834,10 @@ while the page is on. The gate asks only when the request has no key, so a key a
   shown in a tab, whatever the site says. Firefox does not send `same-origin` for a link opened from the game client
   nor for the redirect after the login, and a page in a tab cannot be read by another site. Without the Sec-Fetch
   headers it is the host and port of `Origin`, else of `Referer`, equal to `Host`. `same-site` on a fetch, an
-  image or a frame is refused on purpose, another port of the same host is another origin.
+  image or a frame is refused on purpose, another port of the same host is another origin. On an open route,
+  the page, its files, the login link, `/api/health`, a request that is not same site is served as if it carried
+  no cookie, since the answer is the public one anyway. That is what lets a login link opened from the game
+  client work in a browser that sends none of the Sec-Fetch headers, or other values for them.
 - The cookie is there but unknown or ended, on a route that is not open: 401 `login_required` after the failed
   login limiter, like a request without a key. The page goes to its login view on that code.
 - A valid session becomes the key: `dashboard:<who>`, id `s<8 hex digits>` for the per key limiter, every scope,

@@ -402,7 +402,9 @@ page of this server, a `Sec-Fetch-Site` of `same-origin` or `none`, or a GET or 
 navigation, `Sec-Fetch-Mode` `navigate` with `Sec-Fetch-Dest` `document`, whatever the site, since a login link
 clicked in the game client and the redirect after it do not arrive as `same-origin` in Firefox. Without those headers an
 `Origin`, else a `Referer`, whose host and port are the `Host` header. Any other request that carries the cookie
-gets 403 `cross_site`, a GET from a script, an image or a frame too. An ended or unknown session on a route that needs a key answers 401 `login_required`,
+gets 403 `cross_site`, a GET from a script, an image or a frame too, unless the route is open: the page, its
+files, the login link and `/api/health` then answer as they do to a stranger and the cookie counts for nothing,
+so a browser that calls none of a link's requests same site still reaches the login page. An ended or unknown session on a route that needs a key answers 401 `login_required`,
 which sends the page to its login view, and counts like a request without a key. The session stands for a key
 named `dashboard:<who>` with every scope and `dashboard.requestsPerMinute` as its own limit, and that name is
 what the audit log and the command routes see. While `dashboard.writes` is off any method but GET and HEAD

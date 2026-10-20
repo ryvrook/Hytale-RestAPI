@@ -255,7 +255,8 @@ In plain words, this is how it keeps the server safe.
   12 hours without use and 7 days in any case. `/restapi reload` keeps them.
 - The cookie is HttpOnly and SameSite Strict, and Secure when a proxy in `http.trustedProxies` says the browser
   came over https. RestAPI only takes it on requests from the dashboard's own pages, or on a page opened in a
-  tab, and answers 403 to a fetch, an image or a frame from any other site that carries it.
+  tab, and answers 403 to a fetch, an image or a frame from any other site that carries it. The page and the
+  login link themselves are public and are served whatever the browser says about the site.
 - A session acts as `dashboard:<who made the link>` in the audit log, with every scope and its own request limit.
   While `dashboard.writes` is off it may only read, any other method answers 403 `read_only`. A key sent with a
   request always counts instead of the cookie.
